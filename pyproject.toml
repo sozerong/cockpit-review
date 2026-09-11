@@ -1,0 +1,49 @@
+[project]
+name = "cockpit-review"
+version = "0.1.0"
+description = "Deterministic verification cockpit for AI-generated code — no LLM in the analysis path"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["code-review", "static-analysis", "ai-code", "tree-sitter", "cli"]
+authors = [{ name = "cockpit contributors" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "tree-sitter>=0.23",
+    "tree-sitter-python>=0.23",
+]
+
+[project.urls]
+"Source" = "https://github.com/sozerong/cockpit-review"
+"Design brief" = "https://github.com/sozerong/cockpit-review/blob/main/PROJECT_BRIEF.md"
+"Issues" = "https://github.com/sozerong/cockpit-review/issues"
+
+[project.scripts]
+cockpit = "cockpit.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cockpit"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/cockpit",
+    "README.md",
+    "LICENSE",
+    "PROJECT_BRIEF.md",
+    "EXECUTION_PLAN.md",
+]

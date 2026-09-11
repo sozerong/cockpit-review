@@ -1,0 +1,92 @@
+[
+  {
+    "name": "requests",
+    "files_scanned": 37,
+    "cockpit_findings": 9,
+    "ruff_findings": 1,
+    "overlap": 0,
+    "unique_to_cockpit": 9,
+    "error": ""
+  },
+  {
+    "name": "click",
+    "files_scanned": 90,
+    "cockpit_findings": 16,
+    "ruff_findings": 27,
+    "overlap": 7,
+    "unique_to_cockpit": 9,
+    "error": ""
+  },
+  {
+    "name": "flask",
+    "files_scanned": 83,
+    "cockpit_findings": 9,
+    "ruff_findings": 17,
+    "overlap": 7,
+    "unique_to_cockpit": 2,
+    "error": ""
+  },
+  {
+    "name": "black",
+    "files_scanned": 343,
+    "cockpit_findings": 124,
+    "ruff_findings": 449,
+    "overlap": 25,
+    "unique_to_cockpit": 99,
+    "error": ""
+  },
+  {
+    "name": "fastapi",
+    "files_scanned": 1138,
+    "cockpit_findings": 8,
+    "ruff_findings": 13,
+    "overlap": 5,
+    "unique_to_cockpit": 3,
+    "error": ""
+  },
+  {
+    "name": "pytest",
+    "files_scanned": 274,
+    "cockpit_findings": 51,
+    "ruff_findings": 46,
+    "overlap": 7,
+    "unique_to_cockpit": 44,
+    "error": ""
+  },
+  {
+    "name": "poetry",
+    "files_scanned": 447,
+    "cockpit_findings": 5,
+    "ruff_findings": 5,
+    "overlap": 1,
+    "unique_to_cockpit": 4,
+    "error": ""
+  },
+  {
+    "name": "httpx",
+    "files_scanned": 60,
+    "cockpit_findings": 3,
+    "ruff_findings": 2,
+    "overlap": 0,
+    "unique_to_cockpit": 3,
+    "error": ""
+  },
+  {
+    "name": "aiohttp",
+    "files_scanned": 172,
+    "cockpit_findings": 17,
+    "ruff_findings": 0,
+    "overlap": 0,
+    "unique_to_cockpit": 17,
+    "error": ""
+  },
+  {
+    "name": "records",
+    "files_scanned": 9,
+    "cockpit_findings": 1,
+    "ruff_findings": 1,
+    "overlap": 0,
+    "unique_to_cockpit": 1,
+    "error": ""
+  }
+]

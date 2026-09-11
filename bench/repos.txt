@@ -1,0 +1,17 @@
+# Small-to-mid Python repos for Week 3 gate. Picked for:
+# - Real (mature enough to have real bugs), not toys
+# - Small enough to clone/analyze quickly (< 50k LOC)
+# - Mix of libraries, frameworks, tools
+# Format: shallow_clone_ref  url
+# Ponytail: 10 repos. Plan says 100. This proves the harness; extend the file
+# and rerun for the real number. Every extra repo is 30-60s of clone+analysis.
+main  https://github.com/psf/requests.git
+main  https://github.com/pallets/click.git
+main  https://github.com/pallets/flask.git
+main  https://github.com/psf/black.git
+main  https://github.com/tiangolo/fastapi.git
+main  https://github.com/pytest-dev/pytest.git
+main  https://github.com/python-poetry/poetry.git
+main  https://github.com/encode/httpx.git
+main  https://github.com/aio-libs/aiohttp.git
+master  https://github.com/kennethreitz/records.git

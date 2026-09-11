@@ -1,0 +1,68 @@
+name: cockpit
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # required to post PR comment
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install cockpit
+        run: pip install .
+
+      # Fails only on NEW findings (baselined ones are suppressed).
+      # No baseline yet? First run establishes it, gets 0 new findings.
+      - name: Run cockpit
+        id: check
+        run: |
+          cockpit check --json --baseline > cockpit.json || true
+          cockpit check --no-color --baseline
+          # Fail the job only on new warns.
+          cockpit check --exit-code --baseline > /dev/null
+
+      - name: Upload findings JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cockpit-findings
+          path: cockpit.json
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const env = JSON.parse(fs.readFileSync('cockpit.json', 'utf8'));
+            const s = env.summary;
+            if (s.block + s.warn === 0) return;
+
+            const lines = env.findings
+              .filter(f => f.severity !== 'info')
+              .slice(0, 20)
+              .map(f => `- **${f.severity}** \`${f.file}:${f.span[0]}\` [${f.analyzer_id}] ${f.message}`);
+            const more = env.findings.filter(f => f.severity !== 'info').length - lines.length;
+            const body = [
+              `**cockpit** found new issues (baseline suppressed the rest):`,
+              ``,
+              `block=${s.block}  warn=${s.warn}  info=${s.info}  (scanned ${s.files_scanned} files)`,
+              ``,
+              ...lines,
+              more > 0 ? `\n_… and ${more} more (see artifact)_` : '',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });

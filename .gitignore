@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# cockpit runtime
+.cockpit/
+
+# Bench data (external clones — huge, reproducible from bench/repos.txt)
+bench/clones/
+
+# Bench cache (regeneratable)
+bench/paper_c/out/.age_cache.json
+
+# Editor
+.vscode/
+.idea/
+*.swp
