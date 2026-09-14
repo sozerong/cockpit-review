@@ -39,7 +39,13 @@ cockpit baseline save               # 현재 findings 스냅샷 (.cockpit/baseli
 
 cockpit watch [repo]                # 파일 변경 시 재실행, NDJSON 스트림
 cockpit watch --once                # 한 번만 emit
+
+cockpit report [repo] [--out FILE]  # 단일 파일 HTML 리포트 생성
+                                    # 기본 경로: <repo>/cockpit-report.html
 ```
+
+`report`는 findings JSON을 임베드한 자립형 HTML을 만든다. 브라우저에서 열면
+severity 필터, 텍스트 검색, evidence 클릭 확장 — CDN·번들러 없음, 파일 하나로 완결.
 
 ## 분석기 (v0.0.1 시점)
 

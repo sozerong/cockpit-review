@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **`cockpit report [--out FILE]`** — single-file HTML report of the current
+  findings envelope. Severity filter (block/warn/info), full-text search
+  across file/analyzer/symbol, click-to-expand evidence. No CDN, no build
+  tools, no runtime dependencies beyond a modern browser. PLAN §7 RISK
+  panel MVP.
+
 ## 0.1.0 — 2026-09-11
 
 First tagged release. Product state at end of Week 5 execution.

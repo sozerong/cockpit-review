@@ -12,6 +12,8 @@ build/
 
 # cockpit runtime
 .cockpit/
+cockpit-report.html
+.cockpit-report.html
 
 # Bench data (external clones — huge, reproducible from bench/repos.txt)
 bench/clones/

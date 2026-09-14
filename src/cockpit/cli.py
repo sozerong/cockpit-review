@@ -119,6 +119,11 @@ def main(argv: list[str] | None = None) -> int:
     bs = bsub.add_parser("save", help="Snapshot current findings as baseline")
     bs.add_argument("repo", nargs="?", default=".", type=Path)
 
+    r = sub.add_parser("report", help="Write a self-contained HTML report")
+    r.add_argument("repo", nargs="?", default=".", type=Path)
+    r.add_argument("--out", type=Path,
+                   help="Output path (default: <repo>/cockpit-report.html)")
+
     args = p.parse_args(argv)
     if args.cmd == "check":
         use_color = sys.stdout.isatty() and not args.no_color
@@ -129,6 +134,9 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_watch(args.repo, once=args.once)
     if args.cmd == "baseline" and args.baseline_cmd == "save":
         return cmd_baseline_save(args.repo)
+    if args.cmd == "report":
+        from .ui import cmd_report
+        return cmd_report(args.repo, args.out)
     return 2
 
 
