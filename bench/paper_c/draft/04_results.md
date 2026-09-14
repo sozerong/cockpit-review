@@ -153,15 +153,41 @@ paper's central empirical claim.
 
 ## 4.7 Robustness (Appendix summary — full tables in App. C)
 
-- **Alternate churn windows.** With 7-day and 30-day windows, aggregate
-  ρ_dup is −0.41 and −0.46, respectively. Direction and magnitude are
-  stable.
-- **Excluding zero-churn rows.** Restricting to rows with any 14-day
-  churn (N ≈ 6.2 k), ρ_dup = −0.36; direction preserved.
-- **Alternate metric (raw counts, no log).** ρ_dup = −0.42; direction
-  preserved.
-- **Weighted by repository size.** Fixed-effect equivalent (mean of
-  per-repo Fisher-z with per-repo weights) yields ρ̄ = −0.37 [−0.44,
-  −0.30]; direction preserved.
+- **Fisher-z weighted per-repo mean.** ρ̄_dup = **−0.413**, 95 % CI
+  [−0.424, −0.401]. Per-repo z transformed, weighted by n − 3,
+  aggregated, back-transformed. All ten repos contribute negative z;
+  the aggregate is not driven by one repo.
+- **Raw-count (no log).** ρ_dup = −0.429. Spearman is rank-invariant,
+  so log transformation is only a display choice.
+- **Alternate churn windows (7d, 30d).** Not run — pipeline supports it
+  (one column addition in `harness.py`) but re-running takes ~4 h.
+  Scheduled as follow-up. See App. C4.
+- **Test-file subgroup.** N = 10,997. ρ ≈ 0 because `dup.block v5` and
+  `risk.error-masking v2` downgrade tests/ findings to info, leaving
+  almost no warn variance in that subset. Confirms the downgrade rule
+  is working as intended; not a claim about test-file dynamics.
 
-The result is robust to reasonable analytic choices.
+## 4.8 Zero-churn population drives the aggregate direction
+
+A subgroup analysis reveals additional nuance that the aggregate ρ
+alone conceals. Restricting to rows where 14-day churn was positive
+(N = 13,620 of 20,859 src-file rows, 65 %), the correlation **reverses
+sign**:
+
+| Subset | N | ρ (warns_dup, churn_14d) | 95 % CI |
+|---|---:|---:|---|
+| All src rows (H1) | 20,859 | −0.439 | [−0.452, −0.426] |
+| Restricted to churn > 0 | 13,620 | **+0.163** | [+0.147, +0.180] |
+
+The negative aggregate is therefore driven by the *zero-churn mass*:
+high-warns files are disproportionately likely to have **zero** churn
+in the following 14 days. Conditional on being touched at all, higher
+warns is associated with slightly *more* churn — the direction the
+industry framing predicts.
+
+We do not treat this as a contradiction of §4.2 but as a refinement
+of it: the primary signal in the data is a hurdle effect at the
+first-touch boundary. Once a file is being modified, warnings weakly
+predict the *volume* of modification; but warnings much more strongly
+predict whether the file will be modified at all. §5 discusses the
+implication for the "stability signal" interpretation.

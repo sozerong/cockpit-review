@@ -48,7 +48,32 @@ high-count files would be at best inert and at worst counterproductive
 (reducing the code's stability signal without addressing whatever real
 defects exist).
 
-## 5.2 Implications for AI-code review tools
+## 5.2 The two-part relationship
+
+§4.8 refines the aggregate pattern into a hurdle structure:
+
+1. **Touch probability.** High-warns files are much less likely to be
+   modified at all in the next 14 days. This is where the negative
+   aggregate signal lives.
+2. **Touch volume (conditional).** Among files that are modified, high
+   warns is weakly associated with **more** modification (ρ ≈ +0.16).
+
+Interpretation. The four mechanisms in §5.1 explain the touch-
+probability effect: framework core (M4), maturity resistance (M2), and
+responsibility stability (M1) all reduce the probability that a
+utility file will be touched at all. But **conditional on being
+opened** for change, high-warns files are structurally harder to
+modify surgically — one dup pattern touched leads to related patterns
+also touched, one broad `except` clause modified likely surfaces a
+second one. This is the (M2) maturity-resistance mechanism operating
+*inside* a commit rather than at the commit boundary.
+
+For a review tool, the practical distinction matters: the alert should
+fire not on "high warns" (predicts non-change) but on "high warns *and*
+now being changed" (predicts wider-than-expected blast radius). We
+return to this in §5.3.
+
+## 5.3 Implications for AI-code review tools
 
 If the metric family we test does not predict future rework, tools
 that surface it need to reconsider what they alert on.
