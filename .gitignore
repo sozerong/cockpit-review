@@ -11,7 +11,8 @@ dist/
 build/
 
 # cockpit runtime
-.cockpit/
+.cockpit/*
+!.cockpit/baseline.json
 cockpit-report.html
 .cockpit-report.html
 
