@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Instrument Sans', system-ui, sans-serif; }
+    a { color: oklch(0.35 0.18 20); }
+    a:hover { color: oklch(0.28 0.20 20); }
+  </style>
+</helmet>
+
+<!-- Direction B: Editorial / paper-first / academic -->
+<div style="width: 720px; height: 480px; background: oklch(0.985 0.010 85); color: oklch(0.20 0.005 60); padding: 34px 40px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; gap: 20px;">
+
+  <!-- Top rule + masthead -->
+  <div>
+    <div style="height: 4px; background: oklch(0.25 0.005 60); margin-bottom: 8px;"></div>
+    <div style="display: flex; align-items: baseline; justify-content: space-between;">
+      <div style="font-family: 'Instrument Serif', serif; font-size: 40px; line-height: 0.95; letter-spacing: -0.015em; color: oklch(0.18 0.005 60);">
+        cockpit <span style="font-style: italic; color: oklch(0.35 0.18 20);">·</span> a review
+      </div>
+      <div style="font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.45 0.005 60); letter-spacing: 0.06em; text-transform: uppercase;">
+        Sun · Sep 14 · 14:23
+      </div>
+    </div>
+    <div style="font-family: 'Instrument Serif', serif; font-style: italic; font-size: 15px; color: oklch(0.45 0.005 60); margin-top: 4px;">
+      Deterministic findings for sozerong/cockpit-review · main · 3fc9e7a
+    </div>
+    <div style="height: 1px; background: oklch(0.75 0.005 60); margin-top: 12px;"></div>
+  </div>
+
+  <!-- Body: 2 columns -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 32px; flex: 1; min-height: 0;">
+
+    <!-- Left column: headline finding -->
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-family: 'IBM Plex Mono'; font-size: 10px; letter-spacing: 0.14em; color: oklch(0.35 0.18 20); text-transform: uppercase;">
+        Lead finding · warn
+      </div>
+      <div style="font-family: 'Instrument Serif', serif; font-size: 24px; line-height: 1.15; letter-spacing: -0.01em; color: oklch(0.15 0.005 60);">
+        The routing effective-candidate helper is duplicated across three sites.
+      </div>
+      <div style="font-family: 'Instrument Serif', serif; font-style: italic; font-size: 13px; color: oklch(0.40 0.005 60);">
+        A five-line block that reappears verbatim in <span style="font-family: 'IBM Plex Mono'; font-style: normal;">fastapi/routing.py</span>. Read below.
+      </div>
+      <div style="height: 1px; background: oklch(0.78 0.005 60); margin: 8px 0;"></div>
+      <div style="font-family: 'Instrument Serif', serif; font-size: 13px; line-height: 1.55; color: oklch(0.28 0.005 60);">
+        <span style="font-family: 'IBM Plex Mono'; font-size: 11px; padding: 1px 4px; background: oklch(0.94 0.010 85); border-radius: 2px;">routing.py:1610</span>
+        first appears in <span style="font-style: italic;">get_effective_candidates</span>, then again at
+        <span style="font-family: 'IBM Plex Mono'; font-size: 11px;">2841</span> and
+        <span style="font-family: 'IBM Plex Mono'; font-size: 11px;">3427</span> — each identical byte-for-byte after normalisation.
+      </div>
+    </div>
+
+    <!-- Right column: index of the issue -->
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <div style="font-family: 'IBM Plex Mono'; font-size: 10px; letter-spacing: 0.14em; color: oklch(0.35 0.18 20); text-transform: uppercase;">
+        In this issue
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 12px; line-height: 1.55;">
+        <div style="font-family: 'Instrument Serif', serif; font-style: italic;">Duplicated blocks</div>
+        <div style="font-family: 'IBM Plex Mono'; font-size: 11px; color: oklch(0.55 0.005 60); font-variant-numeric: tabular-nums;">·· 7</div>
+        <div style="font-family: 'Instrument Serif', serif; font-style: italic;">Broad exception silence</div>
+        <div style="font-family: 'IBM Plex Mono'; font-size: 11px; color: oklch(0.55 0.005 60); font-variant-numeric: tabular-nums;">·· 3</div>
+        <div style="font-family: 'Instrument Serif', serif; font-style: italic;">Test assertion missing</div>
+        <div style="font-family: 'IBM Plex Mono'; font-size: 11px; color: oklch(0.55 0.005 60); font-variant-numeric: tabular-nums;">·· 2</div>
+        <div style="font-family: 'Instrument Serif', serif; font-style: italic;">Widespread patterns (info)</div>
+        <div style="font-family: 'IBM Plex Mono'; font-size: 11px; color: oklch(0.55 0.005 60); font-variant-numeric: tabular-nums;">·· 183</div>
+      </div>
+
+      <div style="height: 1px; background: oklch(0.78 0.005 60); margin: 12px 0 8px;"></div>
+
+      <div style="font-family: 'IBM Plex Mono'; font-size: 10px; letter-spacing: 0.14em; color: oklch(0.35 0.18 20); text-transform: uppercase;">
+        Editor's note
+      </div>
+      <div style="font-family: 'Instrument Serif', serif; font-style: italic; font-size: 13px; line-height: 1.55; color: oklch(0.30 0.005 60);">
+        “A finding is not a verdict. The evidence lives beneath each headline — click through, look at the code, then decide.”
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-top: auto; padding-top: 10px;">
+        <div style="font-family: 'IBM Plex Mono'; font-size: 10px; letter-spacing: 0.10em; color: oklch(0.45 0.005 60);">1,138 FILES · 4.2s · WATCHING</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Direction label -->
+  <div style="position: absolute; bottom: 20px; right: 24px; font-family: 'Instrument Sans', sans-serif; font-size: 10px; color: oklch(0.45 0.005 60); letter-spacing: 0.08em; text-transform: uppercase;">
+    Direction B · Editorial
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

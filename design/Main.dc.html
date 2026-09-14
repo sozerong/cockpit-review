@@ -1,0 +1,334 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; font-family: 'IBM Plex Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: oklch(0.22 0.005 240); background: oklch(0.985 0.003 240); }
+    a { color: oklch(0.55 0.14 30); text-decoration: none; }
+    a:hover { color: oklch(0.47 0.16 30); text-decoration: underline; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 900px; display: flex; flex-direction: column; overflow: hidden; background: oklch(0.985 0.003 240);">
+
+  <!-- Header -->
+  <div style="display: flex; align-items: center; gap: 24px; padding: 0 24px; height: 56px; border-bottom: 1px solid oklch(0.90 0.005 240); background: oklch(0.995 0.003 240); flex-shrink: 0;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="oklch(0.55 0.14 30)" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="3" fill="oklch(0.55 0.14 30)" stroke="none"/></svg>
+      <span style="font-weight: 600; font-size: 15px; letter-spacing: -0.01em;">cockpit</span>
+      <span style="font-family: 'IBM Plex Mono'; font-size: 11px; color: oklch(0.55 0.005 240); padding: 2px 6px; background: oklch(0.94 0.005 240); border-radius: 3px; letter-spacing: 0.02em;">v0.1.0</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; flex: 1; font-family: 'IBM Plex Mono'; font-size: 12px; color: oklch(0.45 0.005 240);">
+      <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2 .37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      <span>sozerong/cockpit-review</span>
+      <span style="color: oklch(0.78 0.005 240);">·</span>
+      <span>main</span>
+      <span style="color: oklch(0.78 0.005 240);">·</span>
+      <span>3fc9e7a</span>
+      <span style="color: oklch(0.78 0.005 240);">·</span>
+      <span>2 min ago</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <button style="height: 32px; padding: 0 12px; border: 1px solid oklch(0.88 0.005 240); background: transparent; border-radius: 6px; font-family: inherit; font-size: 12px; color: oklch(0.30 0.005 240); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3v4h-4M2 13v-4h4"/><path d="M2 7a6 6 0 0110-3.7l2 2.7M14 9a6 6 0 01-10 3.7l-2-2.7"/></svg>
+        Re-run
+      </button>
+      <button style="height: 32px; padding: 0 12px; border: 1px solid oklch(0.88 0.005 240); background: transparent; border-radius: 6px; font-family: inherit; font-size: 12px; color: oklch(0.30 0.005 240); cursor: pointer;">Save baseline</button>
+      <div style="width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, oklch(0.60 0.14 30), oklch(0.55 0.14 60));"></div>
+    </div>
+  </div>
+
+  <!-- Summary strip -->
+  <div style="display: flex; align-items: center; gap: 20px; padding: 14px 24px; border-bottom: 1px solid oklch(0.93 0.005 240); background: oklch(0.995 0.003 240); flex-shrink: 0;">
+    <!-- block -->
+    <div style="display: flex; align-items: baseline; gap: 8px;">
+      <span style="font-family: 'IBM Plex Mono'; font-weight: 600; font-size: 22px; color: oklch(0.35 0.005 240); font-variant-numeric: tabular-nums;">0</span>
+      <div style="display: flex; align-items: center; gap: 5px; color: oklch(0.50 0.005 240); font-size: 12px;">
+        <span style="width: 8px; height: 8px; border-radius: 2px; background: oklch(0.52 0.19 25);"></span>
+        block
+      </div>
+    </div>
+    <div style="width: 1px; height: 20px; background: oklch(0.90 0.005 240);"></div>
+    <!-- warn -->
+    <div style="display: flex; align-items: baseline; gap: 8px;">
+      <span style="font-family: 'IBM Plex Mono'; font-weight: 600; font-size: 22px; color: oklch(0.30 0.005 240); font-variant-numeric: tabular-nums;">12</span>
+      <div style="display: flex; align-items: center; gap: 5px; color: oklch(0.50 0.005 240); font-size: 12px;">
+        <span style="width: 8px; height: 8px; border-radius: 2px; background: oklch(0.68 0.15 55);"></span>
+        warn
+      </div>
+    </div>
+    <div style="width: 1px; height: 20px; background: oklch(0.90 0.005 240);"></div>
+    <!-- info -->
+    <div style="display: flex; align-items: baseline; gap: 8px;">
+      <span style="font-family: 'IBM Plex Mono'; font-weight: 600; font-size: 22px; color: oklch(0.30 0.005 240); font-variant-numeric: tabular-nums;">183</span>
+      <div style="display: flex; align-items: center; gap: 5px; color: oklch(0.50 0.005 240); font-size: 12px;">
+        <span style="width: 8px; height: 8px; border-radius: 2px; background: oklch(0.60 0.14 230);"></span>
+        info
+      </div>
+    </div>
+    <div style="flex: 1;"></div>
+    <!-- Meta -->
+    <div style="display: flex; align-items: center; gap: 16px; color: oklch(0.50 0.005 240); font-size: 12px;">
+      <span style="display: inline-flex; align-items: center; gap: 5px;">
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M9 1H3v14h10V5L9 1zm3 12H4V3h4v3h4v7zM9 5V2.5L11.5 5H9z"/></svg>
+        1,138 files scanned
+      </span>
+      <span style="display: inline-flex; align-items: center; gap: 5px;">
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.5"/><path d="M8 4v4l2.5 1.5"/></svg>
+        4.2s
+      </span>
+      <span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: oklch(0.94 0.006 130); color: oklch(0.35 0.10 140); border-radius: 4px; font-family: 'IBM Plex Mono'; font-size: 11px;">
+        <span style="width: 6px; height: 6px; border-radius: 50%; background: oklch(0.55 0.15 140);"></span>
+        watching
+      </span>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div style="display: flex; align-items: center; gap: 12px; padding: 12px 24px; border-bottom: 1px solid oklch(0.93 0.005 240); background: oklch(0.985 0.003 240); flex-shrink: 0;">
+    <!-- Severity pills -->
+    <div style="display: flex; gap: 6px;">
+      <button style="height: 28px; padding: 0 10px; border-radius: 5px; border: 1px solid oklch(0.88 0.005 240); background: transparent; color: oklch(0.60 0.005 240); font-family: inherit; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;">
+        <span style="width: 7px; height: 7px; border-radius: 50%; background: oklch(0.52 0.19 25);"></span>
+        block
+        <span style="opacity: 0.6; font-family: 'IBM Plex Mono';">0</span>
+      </button>
+      <button style="height: 28px; padding: 0 10px; border-radius: 5px; border: 1px solid oklch(0.55 0.14 30); background: oklch(0.55 0.14 30 / 0.08); color: oklch(0.32 0.06 30); font-family: inherit; font-size: 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;">
+        <span style="width: 7px; height: 7px; border-radius: 50%; background: oklch(0.68 0.15 55);"></span>
+        warn
+        <span style="opacity: 0.7; font-family: 'IBM Plex Mono';">12</span>
+      </button>
+      <button style="height: 28px; padding: 0 10px; border-radius: 5px; border: 1px solid oklch(0.88 0.005 240); background: transparent; color: oklch(0.60 0.005 240); font-family: inherit; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;">
+        <span style="width: 7px; height: 7px; border-radius: 50%; background: oklch(0.60 0.14 230);"></span>
+        info
+        <span style="opacity: 0.6; font-family: 'IBM Plex Mono';">183</span>
+      </button>
+    </div>
+
+    <div style="width: 1px; height: 20px; background: oklch(0.90 0.005 240);"></div>
+
+    <!-- Analyzer chips -->
+    <div style="display: flex; gap: 6px;">
+      <button style="height: 28px; padding: 0 10px; border-radius: 5px; border: 1px solid oklch(0.88 0.005 240); background: oklch(0.97 0.005 240); color: oklch(0.35 0.005 240); font-family: 'IBM Plex Mono'; font-size: 11px; cursor: pointer;">dup.block</button>
+      <button style="height: 28px; padding: 0 10px; border-radius: 5px; border: 1px solid oklch(0.88 0.005 240); background: oklch(0.97 0.005 240); color: oklch(0.35 0.005 240); font-family: 'IBM Plex Mono'; font-size: 11px; cursor: pointer;">risk.error-masking</button>
+      <button style="height: 28px; padding: 0 10px; border-radius: 5px; border: 1px dashed oklch(0.85 0.005 240); background: transparent; color: oklch(0.55 0.005 240); font-family: 'IBM Plex Mono'; font-size: 11px; cursor: pointer;">+ 3 more</button>
+    </div>
+
+    <div style="flex: 1;"></div>
+
+    <!-- Search -->
+    <div style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; background: oklch(0.97 0.005 240); border: 1px solid oklch(0.88 0.005 240); border-radius: 5px; width: 260px;">
+      <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="oklch(0.55 0.005 240)" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/></svg>
+      <input type="text" placeholder="filter by file, analyzer, symbol…" style="border: none; background: transparent; outline: none; font: inherit; font-size: 12px; flex: 1; color: oklch(0.30 0.005 240);">
+      <span style="font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.60 0.005 240); background: oklch(0.94 0.005 240); padding: 1px 5px; border-radius: 3px;">/</span>
+    </div>
+
+    <!-- Sort -->
+    <button style="height: 30px; padding: 0 10px; border: 1px solid oklch(0.88 0.005 240); background: oklch(0.97 0.005 240); border-radius: 5px; font-family: inherit; font-size: 12px; color: oklch(0.35 0.005 240); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+      Sort: severity
+      <svg viewBox="0 0 12 12" width="10" height="10" fill="currentColor"><path d="M2 4l4 4 4-4z"/></svg>
+    </button>
+  </div>
+
+  <!-- Split view -->
+  <div style="display: flex; flex: 1; min-height: 0;">
+    <!-- Findings list -->
+    <div style="width: 880px; overflow-y: auto; border-right: 1px solid oklch(0.93 0.005 240);">
+      <!-- Section: warn cluster -->
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px 24px; background: oklch(0.97 0.005 240); border-bottom: 1px solid oklch(0.92 0.005 240); font-family: 'IBM Plex Mono'; font-size: 11px; color: oklch(0.45 0.005 240); text-transform: uppercase; letter-spacing: 0.04em;">
+        <svg viewBox="0 0 12 12" width="10" height="10" fill="currentColor"><path d="M3 2l4 4-4 4z"/></svg>
+        src/fastapi/routing.py
+        <span style="opacity: 0.6;">· 4 findings</span>
+      </div>
+
+      <!-- Row: selected -->
+      <div style="display: grid; grid-template-columns: 60px 1fr 180px; gap: 12px; padding: 14px 24px; align-items: start; background: oklch(0.55 0.14 30 / 0.05); border-left: 3px solid oklch(0.55 0.14 30); position: relative;">
+        <div style="display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 3px; background: oklch(0.68 0.15 55); color: white; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; height: 18px; width: 46px;">WARN</div>
+        <div>
+          <div style="font-family: 'IBM Plex Mono'; font-size: 13px; color: oklch(0.20 0.005 240); font-weight: 500;">
+            fastapi/routing.py<span style="color: oklch(0.55 0.005 240);">:</span><span style="color: oklch(0.55 0.14 30);">1610</span>
+            <span style="color: oklch(0.55 0.005 240); font-weight: 400; margin-left: 8px;">·</span>
+            <span style="margin-left: 8px; color: oklch(0.40 0.005 240);">get_effective_candidates</span>
+          </div>
+          <div style="margin-top: 4px; font-size: 13px; color: oklch(0.30 0.005 240); line-height: 1.45;">
+            5+ line block duplicated in 3 places
+          </div>
+          <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: oklch(0.55 0.005 240);">
+            <span style="font-family: 'IBM Plex Mono'; padding: 1px 6px; background: oklch(0.94 0.005 240); border-radius: 3px; font-size: 10px;">dup.block v5</span>
+            <span>· window_hash <span style="font-family: 'IBM Plex Mono';">4c8f21b0</span></span>
+          </div>
+        </div>
+        <div style="font-family: 'IBM Plex Mono'; font-size: 11px; color: oklch(0.55 0.005 240); text-align: right; padding-top: 4px;">
+          new since main
+        </div>
+      </div>
+
+      <!-- Row -->
+      <div style="display: grid; grid-template-columns: 60px 1fr 180px; gap: 12px; padding: 14px 24px; align-items: start; border-bottom: 1px solid oklch(0.94 0.005 240);">
+        <div style="display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 3px; background: oklch(0.68 0.15 55); color: white; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; height: 18px; width: 46px;">WARN</div>
+        <div>
+          <div style="font-family: 'IBM Plex Mono'; font-size: 13px; color: oklch(0.30 0.005 240);">
+            fastapi/routing.py<span style="color: oklch(0.60 0.005 240);">:</span><span style="color: oklch(0.55 0.005 240);">634</span>
+          </div>
+          <div style="margin-top: 4px; font-size: 13px; color: oklch(0.30 0.005 240);">
+            except clause swallows errors (broad-except)
+          </div>
+          <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: oklch(0.55 0.005 240);">
+            <span style="font-family: 'IBM Plex Mono'; padding: 1px 6px; background: oklch(0.94 0.005 240); border-radius: 3px; font-size: 10px;">risk.error-masking v2</span>
+            <span>· kind <span style="font-family: 'IBM Plex Mono';">broad-except</span></span>
+          </div>
+        </div>
+        <div style="font-family: 'IBM Plex Mono'; font-size: 11px; color: oklch(0.55 0.005 240); text-align: right; padding-top: 4px;">
+          <span style="color: oklch(0.35 0.10 140);">baselined</span>
+        </div>
+      </div>
+
+      <!-- Row -->
+      <div style="display: grid; grid-template-columns: 60px 1fr 180px; gap: 12px; padding: 14px 24px; align-items: start; border-bottom: 1px solid oklch(0.94 0.005 240);">
+        <div style="display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 3px; background: oklch(0.68 0.15 55); color: white; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; height: 18px; width: 46px;">WARN</div>
+        <div>
+          <div style="font-family: 'IBM Plex Mono'; font-size: 13px; color: oklch(0.30 0.005 240);">
+            fastapi/routing.py<span style="color: oklch(0.60 0.005 240);">:</span><span style="color: oklch(0.55 0.005 240);">3028</span>
+          </div>
+          <div style="margin-top: 4px; font-size: 13px; color: oklch(0.30 0.005 240);">
+            5+ line block duplicated in 2 places
+          </div>
+          <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: oklch(0.55 0.005 240);">
+            <span style="font-family: 'IBM Plex Mono'; padding: 1px 6px; background: oklch(0.94 0.005 240); border-radius: 3px; font-size: 10px;">dup.block v5</span>
+          </div>
+        </div>
+        <div style="text-align: right; padding-top: 4px;"></div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px 24px; background: oklch(0.97 0.005 240); border-top: 1px solid oklch(0.92 0.005 240); border-bottom: 1px solid oklch(0.92 0.005 240); font-family: 'IBM Plex Mono'; font-size: 11px; color: oklch(0.45 0.005 240); text-transform: uppercase; letter-spacing: 0.04em;">
+        <svg viewBox="0 0 12 12" width="10" height="10" fill="currentColor"><path d="M3 2l4 4-4 4z"/></svg>
+        src/fastapi/dependencies/models.py
+        <span style="opacity: 0.6;">· 2 findings</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 60px 1fr 180px; gap: 12px; padding: 14px 24px; align-items: start; border-bottom: 1px solid oklch(0.94 0.005 240);">
+        <div style="display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 3px; background: oklch(0.68 0.15 55); color: white; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; height: 18px; width: 46px;">WARN</div>
+        <div>
+          <div style="font-family: 'IBM Plex Mono'; font-size: 13px; color: oklch(0.30 0.005 240);">
+            dependencies/models.py<span style="color: oklch(0.60 0.005 240);">:</span><span style="color: oklch(0.55 0.005 240);">141</span>
+            <span style="color: oklch(0.60 0.005 240); margin-left: 8px;">·</span>
+            <span style="margin-left: 8px; color: oklch(0.40 0.005 240);">_is_gen_callable_cached</span>
+          </div>
+          <div style="margin-top: 4px; font-size: 13px; color: oklch(0.30 0.005 240);">
+            5+ line block duplicated in 3 places
+          </div>
+          <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: oklch(0.55 0.005 240);">
+            <span style="font-family: 'IBM Plex Mono'; padding: 1px 6px; background: oklch(0.94 0.005 240); border-radius: 3px; font-size: 10px;">dup.block v5</span>
+          </div>
+        </div>
+        <div style="text-align: right; padding-top: 4px;"></div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 60px 1fr 180px; gap: 12px; padding: 14px 24px; align-items: start; border-bottom: 1px solid oklch(0.94 0.005 240);">
+        <div style="display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 3px; background: oklch(0.68 0.15 55); color: white; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; height: 18px; width: 46px;">WARN</div>
+        <div>
+          <div style="font-family: 'IBM Plex Mono'; font-size: 13px; color: oklch(0.30 0.005 240);">
+            security/http.py<span style="color: oklch(0.60 0.005 240);">:</span><span style="color: oklch(0.55 0.005 240);">95</span>
+          </div>
+          <div style="margin-top: 4px; font-size: 13px; color: oklch(0.30 0.005 240);">
+            5+ line block duplicated in 3 places
+          </div>
+          <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: oklch(0.55 0.005 240);">
+            <span style="font-family: 'IBM Plex Mono'; padding: 1px 6px; background: oklch(0.94 0.005 240); border-radius: 3px; font-size: 10px;">dup.block v5</span>
+          </div>
+        </div>
+        <div style="text-align: right; padding-top: 4px;"></div>
+      </div>
+
+      <!-- Load more affordance -->
+      <div style="padding: 16px 24px; text-align: center;">
+        <button style="font: inherit; font-size: 12px; color: oklch(0.55 0.14 30); background: transparent; border: none; cursor: pointer;">Show 5 more findings ↓</button>
+      </div>
+    </div>
+
+    <!-- Evidence panel -->
+    <div style="width: 560px; display: flex; flex-direction: column; background: oklch(0.995 0.003 240);">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid oklch(0.93 0.005 240); flex-shrink: 0;">
+        <div style="display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 3px; background: oklch(0.68 0.15 55); color: white; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; height: 18px;">WARN</div>
+        <div style="font-family: 'IBM Plex Mono'; font-size: 13px; font-weight: 500; color: oklch(0.20 0.005 240);">
+          fastapi/routing.py<span style="color: oklch(0.55 0.005 240);">:</span><span style="color: oklch(0.55 0.14 30);">1610</span>
+        </div>
+        <div style="flex: 1;"></div>
+        <button title="Copy path" style="padding: 5px; border: none; background: transparent; color: oklch(0.55 0.005 240); border-radius: 4px; cursor: pointer;">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5"/></svg>
+        </button>
+        <button title="Open in editor" style="padding: 5px; border: none; background: transparent; color: oklch(0.55 0.005 240); border-radius: 4px; cursor: pointer;">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M11 2h3v3M6.5 9.5L14 2M12 9v4a1 1 0 01-1 1H3a1 1 0 01-1-1V5a1 1 0 011-1h4"/></svg>
+        </button>
+        <button title="Close" style="padding: 5px; border: none; background: transparent; color: oklch(0.55 0.005 240); border-radius: 4px; cursor: pointer;">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 3l10 10M13 3L3 13"/></svg>
+        </button>
+      </div>
+
+      <div style="padding: 18px 20px; flex: 1; overflow-y: auto;">
+        <div style="font-size: 13px; color: oklch(0.30 0.005 240); line-height: 1.55; margin-bottom: 16px;">
+          Function <code style="font-family: 'IBM Plex Mono'; background: oklch(0.94 0.005 240); padding: 1px 6px; border-radius: 3px; font-size: 12px;">get_effective_candidates</code> repeats a 5-line block that also appears at two other locations. This is a candidate for a shared helper.
+        </div>
+
+        <!-- Code preview -->
+        <div style="border: 1px solid oklch(0.92 0.005 240); border-radius: 6px; overflow: hidden; margin-bottom: 20px; background: oklch(0.995 0.003 240);">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: oklch(0.97 0.005 240); border-bottom: 1px solid oklch(0.93 0.005 240); font-family: 'IBM Plex Mono'; font-size: 11px; color: oklch(0.45 0.005 240);">
+            <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M9 1H3v14h10V5L9 1zm3 12H4V3h4v3h4v7z"/></svg>
+            fastapi/routing.py <span style="opacity: 0.6;">· lines 1608–1616</span>
+          </div>
+          <pre style="margin: 0; padding: 12px 0; font-family: 'IBM Plex Mono'; font-size: 12px; line-height: 1.65; color: oklch(0.25 0.005 240); overflow-x: auto;"><div style="display: grid; grid-template-columns: 44px 1fr;"><div style="color: oklch(0.65 0.005 240); text-align: right; padding-right: 14px; user-select: none;">1608</div><div style="padding-right: 14px;">    <span style="color: oklch(0.50 0.15 300);">def</span> <span style="color: oklch(0.45 0.14 230);">get_effective_candidates</span>(<span style="color: oklch(0.40 0.005 240);">self</span>):</div><div style="color: oklch(0.65 0.005 240); text-align: right; padding-right: 14px;">1609</div><div style="padding-right: 14px;">        routes_version = self.original_router.routes_version</div><div style="color: oklch(0.55 0.14 30); text-align: right; padding-right: 14px; background: oklch(0.68 0.15 55 / 0.10); font-weight: 600;">1610</div><div style="padding-right: 14px; background: oklch(0.68 0.15 55 / 0.10);">        <span style="color: oklch(0.50 0.15 300);">if</span> routes_version == self._effective_candidates_version:</div><div style="color: oklch(0.55 0.14 30); text-align: right; padding-right: 14px; background: oklch(0.68 0.15 55 / 0.10); font-weight: 600;">1611</div><div style="padding-right: 14px; background: oklch(0.68 0.15 55 / 0.10);">            <span style="color: oklch(0.50 0.15 300);">return</span> self._effective_candidates</div><div style="color: oklch(0.55 0.14 30); text-align: right; padding-right: 14px; background: oklch(0.68 0.15 55 / 0.10); font-weight: 600;">1612</div><div style="padding-right: 14px; background: oklch(0.68 0.15 55 / 0.10);">        effective_candidates: list[...] = []</div><div style="color: oklch(0.55 0.14 30); text-align: right; padding-right: 14px; background: oklch(0.68 0.15 55 / 0.10); font-weight: 600;">1613</div><div style="padding-right: 14px; background: oklch(0.68 0.15 55 / 0.10);">        <span style="color: oklch(0.50 0.15 300);">for</span> route <span style="color: oklch(0.50 0.15 300);">in</span> self.original_router.routes:</div><div style="color: oklch(0.55 0.14 30); text-align: right; padding-right: 14px; background: oklch(0.68 0.15 55 / 0.10); font-weight: 600;">1614</div><div style="padding-right: 14px; background: oklch(0.68 0.15 55 / 0.10);">            <span style="color: oklch(0.50 0.15 300);">if</span> isinstance(route, _IncludedRouter):</div><div style="color: oklch(0.65 0.005 240); text-align: right; padding-right: 14px;">1615</div><div style="padding-right: 14px;">                child_context = self.include_context.combine(...)</div><div style="color: oklch(0.65 0.005 240); text-align: right; padding-right: 14px;">1616</div><div style="padding-right: 14px;">                child_branch = _IncludedRouter(...)</div></div></pre>
+        </div>
+
+        <!-- Matches -->
+        <div style="margin-bottom: 20px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <div style="font-size: 12px; font-weight: 600; color: oklch(0.30 0.005 240); text-transform: uppercase; letter-spacing: 0.06em;">Matches (2)</div>
+            <button style="font: inherit; font-size: 11px; color: oklch(0.55 0.14 30); background: transparent; border: none; cursor: pointer;">Compare side-by-side</button>
+          </div>
+          <a href="#" style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid oklch(0.92 0.005 240); border-radius: 5px; margin-bottom: 6px; text-decoration: none; color: inherit;">
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" style="color: oklch(0.55 0.005 240);"><path d="M9 1H3v14h10V5L9 1zm3 12H4V3h4v3h4v7z"/></svg>
+            <div style="font-family: 'IBM Plex Mono'; font-size: 12px; color: oklch(0.25 0.005 240); flex: 1;">
+              fastapi/routing.py<span style="color: oklch(0.55 0.005 240);">:</span><span style="color: oklch(0.35 0.005 240);">2841–2846</span>
+            </div>
+            <span style="font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.45 0.005 240); background: oklch(0.94 0.005 240); padding: 1px 6px; border-radius: 3px;">exact</span>
+          </a>
+          <a href="#" style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid oklch(0.92 0.005 240); border-radius: 5px; text-decoration: none; color: inherit;">
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" style="color: oklch(0.55 0.005 240);"><path d="M9 1H3v14h10V5L9 1zm3 12H4V3h4v3h4v7z"/></svg>
+            <div style="font-family: 'IBM Plex Mono'; font-size: 12px; color: oklch(0.25 0.005 240); flex: 1;">
+              fastapi/routing.py<span style="color: oklch(0.55 0.005 240);">:</span><span style="color: oklch(0.35 0.005 240);">3427–3432</span>
+            </div>
+            <span style="font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.45 0.005 240); background: oklch(0.94 0.005 240); padding: 1px 6px; border-radius: 3px;">exact</span>
+          </a>
+        </div>
+
+        <!-- Actions -->
+        <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 1px solid oklch(0.93 0.005 240);">
+          <button style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid oklch(0.88 0.005 240); background: white; border-radius: 5px; text-align: left; font: inherit; font-size: 12px; color: oklch(0.30 0.005 240); cursor: pointer;">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="oklch(0.35 0.10 140)" stroke-width="1.5"><path d="M3 8l3 3 7-7"/></svg>
+            Accept as baseline
+            <span style="color: oklch(0.55 0.005 240); margin-left: auto; font-size: 11px;">B</span>
+          </button>
+          <button style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid oklch(0.88 0.005 240); background: white; border-radius: 5px; text-align: left; font: inherit; font-size: 12px; color: oklch(0.30 0.005 240); cursor: pointer;">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1v10M4 7l4 4 4-4M2 14h12"/></svg>
+            Export finding as markdown
+          </button>
+          <button style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid oklch(0.55 0.14 30); background: oklch(0.55 0.14 30 / 0.06); border-radius: 5px; text-align: left; font: inherit; font-size: 12px; color: oklch(0.32 0.10 30); font-weight: 500; cursor: pointer;">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 3h8v10H4z"/><path d="M6 6h4M6 9h4"/></svg>
+            Draft refactor prompt
+            <span style="color: oklch(0.55 0.14 30); margin-left: auto; font-size: 11px;">R</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

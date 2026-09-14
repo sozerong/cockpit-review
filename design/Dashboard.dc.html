@@ -1,0 +1,326 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; font-family: 'IBM Plex Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: oklch(0.55 0.14 30); text-decoration: none; }
+    a:hover { color: oklch(0.47 0.16 30); }
+  </style>
+</helmet>
+
+<!-- Full dashboard: PLAN §7 four-panel vision + terminal footer -->
+<div style="width: 1440px; height: 900px; display: flex; flex-direction: column; background: oklch(0.985 0.003 240); color: oklch(0.22 0.005 240); overflow: hidden;">
+
+  <!-- Header -->
+  <div style="display: flex; align-items: center; gap: 20px; padding: 0 20px; height: 48px; border-bottom: 1px solid oklch(0.90 0.005 240); background: oklch(0.995 0.003 240); flex-shrink: 0;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="oklch(0.55 0.14 30)" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="3" fill="oklch(0.55 0.14 30)" stroke="none"/></svg>
+      <span style="font-weight: 600; font-size: 13px;">cockpit</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px; font-family: 'IBM Plex Mono'; font-size: 11px; color: oklch(0.45 0.005 240); flex: 1;">
+      <span>sozerong/cockpit-review</span>
+      <span style="color: oklch(0.78 0.005 240);">/</span>
+      <span>main</span>
+      <span style="color: oklch(0.78 0.005 240);">·</span>
+      <span>3fc9e7a</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: oklch(0.50 0.005 240);">
+      <span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: oklch(0.94 0.006 130); color: oklch(0.35 0.10 140); border-radius: 4px; font-family: 'IBM Plex Mono';">
+        <span style="width: 6px; height: 6px; border-radius: 50%; background: oklch(0.55 0.15 140); animation: none;"></span>
+        watching
+      </span>
+      <span style="font-family: 'IBM Plex Mono';">1,138 files</span>
+      <span style="color: oklch(0.78 0.005 240);">·</span>
+      <span style="font-family: 'IBM Plex Mono';">4.2s</span>
+    </div>
+    <div style="display: flex; gap: 4px; padding: 3px; background: oklch(0.94 0.005 240); border-radius: 6px;">
+      <div style="padding: 4px 10px; background: oklch(0.995 0.003 240); border-radius: 4px; font-size: 11px; font-weight: 500; color: oklch(0.22 0.005 240); box-shadow: 0 1px 2px oklch(0.20 0.005 240 / 0.05);">Dashboard</div>
+      <div style="padding: 4px 10px; font-size: 11px; color: oklch(0.55 0.005 240);">Findings</div>
+      <div style="padding: 4px 10px; font-size: 11px; color: oklch(0.55 0.005 240);">History</div>
+    </div>
+  </div>
+
+  <!-- 2x2 grid + terminal -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 300px 340px 172px; gap: 12px; padding: 12px; flex: 1; min-height: 0;">
+
+    <!-- NOW panel -->
+    <div style="background: oklch(0.995 0.003 240); border: 1px solid oklch(0.92 0.005 240); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid oklch(0.93 0.005 240); flex-shrink: 0;">
+        <span style="font-family: 'IBM Plex Mono'; font-size: 10px; font-weight: 700; color: oklch(0.45 0.005 240); letter-spacing: 0.08em;">NOW</span>
+        <span style="color: oklch(0.75 0.005 240);">·</span>
+        <span style="font-size: 12px; color: oklch(0.40 0.005 240);">Agent activity</span>
+        <div style="flex: 1;"></div>
+        <span style="font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.55 0.005 240);">Claude Code · sess_bh42</span>
+      </div>
+      <div style="flex: 1; padding: 12px 14px; overflow-y: auto; font-family: 'IBM Plex Mono'; font-size: 11px; line-height: 1.7;">
+        <div style="display: grid; grid-template-columns: 52px 20px 1fr; gap: 8px; margin-bottom: 4px;">
+          <span style="color: oklch(0.60 0.005 240);">14:23:02</span>
+          <span style="color: oklch(0.50 0.15 300);">◆</span>
+          <span style="color: oklch(0.30 0.005 240);">SessionStart · resume</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 20px 1fr; gap: 8px;">
+          <span style="color: oklch(0.60 0.005 240);">14:23:14</span>
+          <span style="color: oklch(0.55 0.14 230);">▸</span>
+          <span style="color: oklch(0.30 0.005 240);">Read <a href="#" style="font-family: inherit;">src/fastapi/routing.py</a></span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 20px 1fr; gap: 8px;">
+          <span style="color: oklch(0.60 0.005 240);">14:23:18</span>
+          <span style="color: oklch(0.55 0.14 230);">▸</span>
+          <span style="color: oklch(0.30 0.005 240);">Grep <span style="color: oklch(0.55 0.005 240);">"except.*pass"</span> · 34 matches</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 20px 1fr; gap: 8px;">
+          <span style="color: oklch(0.60 0.005 240);">14:23:24</span>
+          <span style="color: oklch(0.35 0.10 140);">✎</span>
+          <span style="color: oklch(0.30 0.005 240);">Edit <a href="#" style="font-family: inherit;">routing.py</a> · +12 −4</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 20px 1fr; gap: 8px;">
+          <span style="color: oklch(0.60 0.005 240);">14:23:26</span>
+          <span style="color: oklch(0.68 0.15 55);">◐</span>
+          <span style="color: oklch(0.30 0.005 240);">
+            <span style="background: oklch(0.68 0.15 55 / 0.15); padding: 0 4px; border-radius: 2px;">Claim</span>
+            "Tests still pass after edit"
+          </span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 20px 1fr; gap: 8px;">
+          <span style="color: oklch(0.60 0.005 240);">14:23:29</span>
+          <span style="color: oklch(0.55 0.14 230);">▸</span>
+          <span style="color: oklch(0.30 0.005 240);">Bash <span style="color: oklch(0.55 0.005 240);">pytest -q tests/</span></span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 20px 1fr; gap: 8px;">
+          <span style="color: oklch(0.60 0.005 240);">14:23:47</span>
+          <span style="color: oklch(0.55 0.19 25);">✕</span>
+          <span style="color: oklch(0.30 0.005 240);">
+            Bash exit 1 · 3 failures in <a href="#" style="font-family: inherit;">test_routing.py</a>
+          </span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 20px 1fr; gap: 8px; opacity: 0.7;">
+          <span style="color: oklch(0.60 0.005 240);">now</span>
+          <span style="color: oklch(0.45 0.14 230);">◌</span>
+          <span style="color: oklch(0.30 0.005 240);">Read <a href="#" style="font-family: inherit;">test_routing.py</a> <span style="color: oklch(0.55 0.14 30); background: oklch(0.55 0.14 30 / 0.10); padding: 0 5px; border-radius: 2px; margin-left: 2px;">retrying</span></span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 6px; padding: 8px 14px; border-top: 1px solid oklch(0.93 0.005 240); font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.50 0.005 240); flex-shrink: 0;">
+        <span>stack:</span>
+        <span style="color: oklch(0.35 0.005 240);">task</span><span style="color: oklch(0.75 0.005 240);">›</span>
+        <span style="color: oklch(0.35 0.005 240);">read</span><span style="color: oklch(0.75 0.005 240);">›</span>
+        <span style="color: oklch(0.35 0.005 240);">retry</span>
+      </div>
+    </div>
+
+    <!-- DELTA panel -->
+    <div style="background: oklch(0.995 0.003 240); border: 1px solid oklch(0.92 0.005 240); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid oklch(0.93 0.005 240); flex-shrink: 0;">
+        <span style="font-family: 'IBM Plex Mono'; font-size: 10px; font-weight: 700; color: oklch(0.45 0.005 240); letter-spacing: 0.08em;">DELTA</span>
+        <span style="color: oklch(0.75 0.005 240);">·</span>
+        <span style="font-size: 12px; color: oklch(0.40 0.005 240);">Impact radius</span>
+        <div style="flex: 1;"></div>
+        <div style="display: flex; gap: 4px;">
+          <span style="font-family: 'IBM Plex Mono'; font-size: 10px; padding: 2px 6px; background: oklch(0.94 0.005 240); border-radius: 3px; color: oklch(0.40 0.005 240);">depth 2</span>
+          <span style="font-family: 'IBM Plex Mono'; font-size: 10px; padding: 2px 6px; background: oklch(0.55 0.14 30 / 0.10); border-radius: 3px; color: oklch(0.35 0.10 30);">42 nodes</span>
+        </div>
+      </div>
+      <div style="flex: 1; position: relative; background: linear-gradient(180deg, oklch(0.995 0.003 240), oklch(0.97 0.005 240));">
+        <!-- Faux graph -->
+        <svg viewBox="0 0 640 240" style="width: 100%; height: 100%; display: block;">
+          <!-- Edges -->
+          <g stroke="oklch(0.85 0.005 240)" stroke-width="1" fill="none">
+            <line x1="320" y1="120" x2="140" y2="60"/>
+            <line x1="320" y1="120" x2="180" y2="180"/>
+            <line x1="320" y1="120" x2="480" y2="80"/>
+            <line x1="320" y1="120" x2="500" y2="180"/>
+            <line x1="320" y1="120" x2="260" y2="40"/>
+            <line x1="320" y1="120" x2="380" y2="200"/>
+            <line x1="140" y1="60" x2="80" y2="30"/>
+            <line x1="140" y1="60" x2="60" y2="100"/>
+            <line x1="180" y1="180" x2="80" y2="200"/>
+            <line x1="480" y1="80" x2="580" y2="50"/>
+            <line x1="480" y1="80" x2="600" y2="120"/>
+            <line x1="500" y1="180" x2="600" y2="210"/>
+          </g>
+          <!-- Impact edges (highlighted) -->
+          <g stroke="oklch(0.55 0.14 30)" stroke-width="1.8" fill="none" opacity="0.7">
+            <line x1="320" y1="120" x2="480" y2="80"/>
+            <line x1="320" y1="120" x2="260" y2="40"/>
+            <line x1="480" y1="80" x2="580" y2="50"/>
+          </g>
+          <!-- Nodes -->
+          <g>
+            <circle cx="80" cy="30" r="5" fill="oklch(0.75 0.005 240)"/>
+            <circle cx="60" cy="100" r="5" fill="oklch(0.75 0.005 240)"/>
+            <circle cx="140" cy="60" r="6" fill="oklch(0.55 0.005 240)"/>
+            <circle cx="180" cy="180" r="5" fill="oklch(0.75 0.005 240)"/>
+            <circle cx="80" cy="200" r="4" fill="oklch(0.80 0.005 240)"/>
+            <circle cx="260" cy="40" r="7" fill="oklch(0.68 0.15 55)"/>
+            <circle cx="320" cy="120" r="11" fill="oklch(0.55 0.14 30)"/>
+            <circle cx="320" cy="120" r="15" fill="none" stroke="oklch(0.55 0.14 30)" stroke-width="1.5" opacity="0.4"/>
+            <circle cx="380" cy="200" r="5" fill="oklch(0.75 0.005 240)"/>
+            <circle cx="480" cy="80" r="8" fill="oklch(0.68 0.15 55)"/>
+            <circle cx="500" cy="180" r="5" fill="oklch(0.75 0.005 240)"/>
+            <circle cx="580" cy="50" r="6" fill="oklch(0.68 0.15 55)"/>
+            <circle cx="600" cy="120" r="4" fill="oklch(0.80 0.005 240)"/>
+            <circle cx="600" cy="210" r="4" fill="oklch(0.80 0.005 240)"/>
+          </g>
+          <!-- Labels -->
+          <g font-family="IBM Plex Mono, monospace" font-size="9" fill="oklch(0.45 0.005 240)">
+            <text x="330" y="146" text-anchor="middle" font-weight="600" fill="oklch(0.25 0.005 240)">routing.py</text>
+            <text x="330" y="158" text-anchor="middle" fill="oklch(0.55 0.14 30)">changed</text>
+            <text x="260" y="26" text-anchor="middle">applications.py</text>
+            <text x="480" y="66" text-anchor="middle">dependencies</text>
+            <text x="580" y="36" text-anchor="middle">params.py</text>
+            <text x="140" y="46" text-anchor="middle">security</text>
+          </g>
+        </svg>
+        <div style="position: absolute; left: 14px; bottom: 12px; display: flex; gap: 12px; font-size: 10px; color: oklch(0.50 0.005 240); font-family: 'IBM Plex Mono';">
+          <span style="display: inline-flex; align-items: center; gap: 5px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: oklch(0.55 0.14 30);"></span>changed</span>
+          <span style="display: inline-flex; align-items: center; gap: 5px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: oklch(0.68 0.15 55);"></span>direct dep</span>
+          <span style="display: inline-flex; align-items: center; gap: 5px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: oklch(0.75 0.005 240);"></span>transitive</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RISK panel (killer) -->
+    <div style="background: oklch(0.995 0.003 240); border: 1px solid oklch(0.55 0.14 30 / 0.35); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 0 0 3px oklch(0.55 0.14 30 / 0.05);">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid oklch(0.93 0.005 240); flex-shrink: 0;">
+        <span style="font-family: 'IBM Plex Mono'; font-size: 10px; font-weight: 700; color: oklch(0.35 0.14 30); letter-spacing: 0.08em;">RISK</span>
+        <span style="color: oklch(0.75 0.005 240);">·</span>
+        <span style="font-size: 12px; color: oklch(0.30 0.005 240); font-weight: 500;">12 warn</span>
+        <span style="color: oklch(0.55 0.005 240); font-size: 12px;">· 183 info</span>
+        <div style="flex: 1;"></div>
+        <a href="#" style="font-size: 11px;">Open all →</a>
+      </div>
+      <div style="flex: 1; overflow-y: auto;">
+        <!-- Item -->
+        <div style="display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; padding: 10px 14px; align-items: center; border-bottom: 1px solid oklch(0.95 0.005 240); background: oklch(0.55 0.14 30 / 0.05); border-left: 3px solid oklch(0.55 0.14 30);">
+          <div style="display: inline-flex; align-items: center; justify-content: center; padding: 2px 6px; border-radius: 3px; background: oklch(0.68 0.15 55); color: white; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; height: 16px; width: 40px;">WARN</div>
+          <div style="min-width: 0;">
+            <div style="font-family: 'IBM Plex Mono'; font-size: 12px; color: oklch(0.22 0.005 240); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              routing.py<span style="color: oklch(0.55 0.005 240);">:</span><span style="color: oklch(0.55 0.14 30);">1610</span>
+            </div>
+            <div style="font-size: 11px; color: oklch(0.45 0.005 240); margin-top: 2px;">5+ line block · 3 places</div>
+          </div>
+          <span style="font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.55 0.005 240);">dup.block</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; padding: 10px 14px; align-items: center; border-bottom: 1px solid oklch(0.95 0.005 240);">
+          <div style="display: inline-flex; align-items: center; justify-content: center; padding: 2px 6px; border-radius: 3px; background: oklch(0.68 0.15 55); color: white; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; height: 16px; width: 40px;">WARN</div>
+          <div style="min-width: 0;">
+            <div style="font-family: 'IBM Plex Mono'; font-size: 12px; color: oklch(0.30 0.005 240); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">routing.py<span style="color: oklch(0.55 0.005 240);">:</span>634</div>
+            <div style="font-size: 11px; color: oklch(0.45 0.005 240); margin-top: 2px;">broad-except swallows errors</div>
+          </div>
+          <span style="font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.55 0.005 240);">error-masking</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; padding: 10px 14px; align-items: center; border-bottom: 1px solid oklch(0.95 0.005 240);">
+          <div style="display: inline-flex; align-items: center; justify-content: center; padding: 2px 6px; border-radius: 3px; background: oklch(0.68 0.15 55); color: white; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; height: 16px; width: 40px;">WARN</div>
+          <div style="min-width: 0;">
+            <div style="font-family: 'IBM Plex Mono'; font-size: 12px; color: oklch(0.30 0.005 240); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">models.py<span style="color: oklch(0.55 0.005 240);">:</span>141</div>
+            <div style="font-size: 11px; color: oklch(0.45 0.005 240); margin-top: 2px;">5+ line block · 3 places</div>
+          </div>
+          <span style="font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.55 0.005 240);">dup.block</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; padding: 10px 14px; align-items: center;">
+          <div style="display: inline-flex; align-items: center; justify-content: center; padding: 2px 6px; border-radius: 3px; background: oklch(0.60 0.14 230); color: white; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; height: 16px; width: 40px;">INFO</div>
+          <div style="min-width: 0;">
+            <div style="font-family: 'IBM Plex Mono'; font-size: 12px; color: oklch(0.40 0.005 240);">applications.py<span style="color: oklch(0.65 0.005 240);">:</span>4231</div>
+            <div style="font-size: 11px; color: oklch(0.55 0.005 240); margin-top: 2px;">widespread pattern · 224 places</div>
+          </div>
+          <span style="font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.55 0.005 240);">dup.block</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- EVIDENCE panel -->
+    <div style="background: oklch(0.995 0.003 240); border: 1px solid oklch(0.92 0.005 240); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid oklch(0.93 0.005 240); flex-shrink: 0;">
+        <span style="font-family: 'IBM Plex Mono'; font-size: 10px; font-weight: 700; color: oklch(0.45 0.005 240); letter-spacing: 0.08em;">EVIDENCE</span>
+        <span style="color: oklch(0.75 0.005 240);">·</span>
+        <span style="font-size: 12px; color: oklch(0.40 0.005 240);">Claim vs. actual</span>
+        <div style="flex: 1;"></div>
+        <span style="font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.55 0.005 240);">3 claims this session</span>
+      </div>
+      <div style="flex: 1; overflow-y: auto; padding: 12px 14px;">
+        <!-- Claim 1: failed -->
+        <div style="border: 1px solid oklch(0.55 0.19 25 / 0.35); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; background: oklch(0.55 0.19 25 / 0.03);">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+            <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: oklch(0.55 0.19 25); color: white; font-size: 10px; font-weight: 700;">✕</span>
+            <span style="font-size: 11px; font-weight: 600; color: oklch(0.35 0.14 25);">Refuted</span>
+            <span style="color: oklch(0.65 0.005 240); font-size: 11px;">14:23:26</span>
+            <div style="flex: 1;"></div>
+            <span style="font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.55 0.005 240);">claim.verify</span>
+          </div>
+          <div style="font-size: 12px; color: oklch(0.30 0.005 240); margin-bottom: 6px; font-style: italic;">
+            "Tests still pass after edit"
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; font-family: 'IBM Plex Mono'; font-size: 11px; color: oklch(0.35 0.14 25);">
+            <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M8 1L1 15h14L8 1zm0 5v4M8 12v.01"/></svg>
+            <span>pytest exited 1 · 3 failures</span>
+            <a href="#">show</a>
+          </div>
+        </div>
+
+        <!-- Claim 2: pending -->
+        <div style="border: 1px solid oklch(0.68 0.15 55 / 0.30); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; background: oklch(0.68 0.15 55 / 0.03);">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+            <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: oklch(0.68 0.15 55); color: white; font-size: 10px; font-weight: 700;">?</span>
+            <span style="font-size: 11px; font-weight: 600; color: oklch(0.35 0.10 55);">Pending</span>
+            <span style="color: oklch(0.65 0.005 240); font-size: 11px;">14:23:47</span>
+            <div style="flex: 1;"></div>
+            <span style="font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.55 0.005 240);">claim.verify</span>
+          </div>
+          <div style="font-size: 12px; color: oklch(0.30 0.005 240); font-style: italic;">
+            "This is a simple rename, no behavior change"
+          </div>
+        </div>
+
+        <!-- Claim 3: verified -->
+        <div style="border: 1px solid oklch(0.55 0.15 140 / 0.30); border-radius: 6px; padding: 10px 12px; background: oklch(0.55 0.15 140 / 0.03);">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+            <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: oklch(0.55 0.15 140); color: white; font-size: 10px; font-weight: 700;">✓</span>
+            <span style="font-size: 11px; font-weight: 600; color: oklch(0.32 0.10 140);">Verified</span>
+            <span style="color: oklch(0.65 0.005 240); font-size: 11px;">14:22:11</span>
+            <div style="flex: 1;"></div>
+            <span style="font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.55 0.005 240);">claim.verify</span>
+          </div>
+          <div style="font-size: 12px; color: oklch(0.30 0.005 240); font-style: italic;">
+            "Removed the duplicate helper from three call sites"
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Terminal (spans both columns) -->
+    <div style="grid-column: span 2; background: oklch(0.15 0.005 240); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; font-family: 'IBM Plex Mono';">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid oklch(0.25 0.005 240); flex-shrink: 0;">
+        <div style="display: flex; gap: 5px;">
+          <span style="width: 10px; height: 10px; border-radius: 50%; background: oklch(0.55 0.19 25);"></span>
+          <span style="width: 10px; height: 10px; border-radius: 50%; background: oklch(0.68 0.15 55);"></span>
+          <span style="width: 10px; height: 10px; border-radius: 50%; background: oklch(0.55 0.15 140);"></span>
+        </div>
+        <span style="font-size: 11px; color: oklch(0.70 0.005 240); margin-left: 8px;">TERMINAL · bash · cockpit-review</span>
+        <div style="flex: 1;"></div>
+        <button style="font: inherit; font-family: 'IBM Plex Mono'; font-size: 10px; color: oklch(0.70 0.005 240); background: transparent; border: 1px solid oklch(0.30 0.005 240); border-radius: 3px; padding: 3px 8px; cursor: pointer;">+ new</button>
+      </div>
+      <div style="flex: 1; padding: 10px 14px; font-size: 12px; line-height: 1.55; color: oklch(0.85 0.005 240); overflow-y: auto;">
+        <div><span style="color: oklch(0.55 0.15 140);">$</span> cockpit check src/fastapi/routing.py --json | jq '.summary'</div>
+        <div style="color: oklch(0.70 0.005 240); margin-left: 12px;">{ "block": 0, "warn": 4, "info": 12, "files_scanned": 1 }</div>
+        <div style="margin-top: 6px;"><span style="color: oklch(0.55 0.15 140);">$</span> cockpit baseline save</div>
+        <div style="color: oklch(0.70 0.005 240); margin-left: 12px;">baseline: 195 ids -&gt; .cockpit/baseline.json</div>
+        <div style="margin-top: 6px;"><span style="color: oklch(0.55 0.15 140);">$</span> pytest -q tests/test_routing.py</div>
+        <div style="color: oklch(0.55 0.19 25); margin-left: 12px;">FAILED tests/test_routing.py::test_effective_candidates_cache</div>
+        <div style="color: oklch(0.55 0.19 25); margin-left: 12px;">FAILED tests/test_routing.py::test_route_include_context</div>
+        <div style="color: oklch(0.55 0.19 25); margin-left: 12px;">FAILED tests/test_routing.py::test_effective_candidates_invalidation</div>
+        <div style="color: oklch(0.70 0.005 240); margin-left: 12px;">=== 3 failed, 148 passed in 4.21s ===</div>
+        <div style="margin-top: 6px;"><span style="color: oklch(0.55 0.15 140);">$</span> <span style="background: oklch(0.85 0.005 240); color: oklch(0.15 0.005 240); padding: 0 1px;">_</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
