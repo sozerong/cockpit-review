@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **`test.time.sleep` v1** — flags `time.sleep(...)` and `sleep(...)`
+  (when `from time import sleep`) inside `test_*` functions in test files.
+  Flaky-test signal, `warn`. Real-repo pilot on pytest surfaced 4 hits, all
+  in atime-sensitive tests.
+- **UI: auto-pick baseline mode** — first envelope with no baseline (fresh
+  repo) starts in `all` view instead of empty `new only`. Once set, the
+  user can switch as normal.
+- **CLI: JSON output ASCII-safe** — `cockpit check --json` uses
+  `ensure_ascii=True` so a stray non-ASCII byte in evidence can never
+  crash stdout on legacy Windows consoles (cp949/cp1252).
+- **`cockpit serve --host`** — bind address flag for Tailscale/LAN access.
+  Default `127.0.0.1` unchanged.
 - **`cockpit serve`** — live dashboard. Watch loop pushes to in-memory state
   with a monotonic version; browser long-polls, re-renders on change. Newly
   appeared findings flash. Stdlib only (http.server + threading + urllib).

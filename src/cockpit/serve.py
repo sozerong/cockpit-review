@@ -55,6 +55,9 @@ _RATIONALES = {
     "test.no-test-for-public-symbol":
         "Public top-level symbol has no test_<name> anywhere in the parallel "
         "tests/ tree.",
+    "test.time.sleep":
+        "`time.sleep(...)` inside a test_* function. Waiting on wall time in "
+        "tests is a flakiness antipattern; use event-driven waits.",
 }
 
 
@@ -119,7 +122,9 @@ def _scan(repo: Path) -> dict:
     """Run analyzers + annotate each finding with `baselined` bool and
     a `rationale` string. Baseline is re-read on every scan."""
     env = _run_once(repo)
-    baselined = bl.load(repo) or set()
+    baselined = bl.load(repo)
+    env["has_baseline"] = baselined is not None
+    baselined = baselined or set()
     for f in env["findings"]:
         f["baselined"] = f["id"] in baselined
         f["rationale"] = _RATIONALES.get(f["analyzer_id"], "")
@@ -420,10 +425,18 @@ let findings = [];
 let prevIds = new Set();
 let baselineMode = "new";
 let selectedIdx = -1;
+let modeAutoPicked = false;  // first envelope sets initial mode based on has_baseline
 
 function esc(s) { return String(s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
 
 function render(envelope, freshIds) {
+  // First envelope only: if no baseline exists, "new only" would show
+  // an empty screen on repos this tool has never touched. Flip to "all"
+  // once, then let the user pick.
+  if (!modeAutoPicked) {
+    modeAutoPicked = true;
+    if (envelope.has_baseline === false) setBaselineMode("all");
+  }
   document.getElementById("repo").textContent = envelope.repo;
   const s = envelope.summary;
   const sumEl = document.getElementById("summary");

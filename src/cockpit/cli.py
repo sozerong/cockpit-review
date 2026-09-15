@@ -55,7 +55,9 @@ def cmd_check(repo: Path, as_json: bool, use_color: bool,
     )
 
     if as_json:
-        json.dump(envelope, sys.stdout, ensure_ascii=False, indent=2)
+        # ensure_ascii=True so a legacy console encoding (Windows cp949/cp1252)
+        # can never break JSON output on a stray non-ASCII byte in evidence.
+        json.dump(envelope, sys.stdout, ensure_ascii=True, indent=2)
         sys.stdout.write("\n")
     else:
         if baselined is not None:
