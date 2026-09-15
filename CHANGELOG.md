@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **`except.reraise-vs-raise` v1** — flags `except X as e: ... raise e`
+  where the identifier raised is the `as` alias. Bare `raise` re-raises
+  with the original traceback intact; `raise e` truncates it. Deterministic
+  single AST shape, `warn`.
 - **`cockpit report [--out FILE]`** — single-file HTML report of the current
   findings envelope. Severity filter (block/warn/info), full-text search
   across file/analyzer/symbol, click-to-expand evidence. No CDN, no build
