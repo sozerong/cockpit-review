@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **UI: SYSTEM panel** — bottom strip in the live dashboard exposes the
+  internals: current pipeline phase (idle / detecting / debouncing /
+  scanning / emitting) with elapsed timer, per-scan per-analyzer wall
+  timings (bar chart), a rolling log of the last 30 state transitions,
+  and a thread list with uptime, state version, long-poll waiter count,
+  and indexer/analyzer error counts.
+- **serve: `/system.json`** — cheap poll (~500ms) for the SYSTEM panel;
+  doesn't touch the envelope long-poll path.
 - **UI: EN / KO i18n** — every dashboard label, filter chip, help
   overlay row, evidence panel heading, and per-analyzer rationale
   translated to Korean. Language toggle (EN / KO) in the header;

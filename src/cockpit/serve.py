@@ -21,7 +21,11 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
 from . import baseline as bl
-from .watch import _run_once, _snapshot, POLL_INTERVAL, DEBOUNCE
+from .analyzers import ANALYZERS
+from .changeset import full_scan
+from .finding import to_json
+from .indexer import index_file
+from .watch import _snapshot, POLL_INTERVAL, DEBOUNCE
 
 
 WAIT_TIMEOUT = 25.0     # long-poll ceiling before returning current state
@@ -128,6 +132,21 @@ _STRINGS = {
         "help_q": "toggle this overlay",
         "activity_findings": "findings",
         "activity_files": "files",
+        "system_title": "System · pipeline",
+        "system_hint": "threads · analyzer timings · state machine",
+        "phase_starting": "starting", "phase_idle": "idle",
+        "phase_detecting": "detecting", "phase_debouncing": "debouncing",
+        "phase_scanning": "scanning", "phase_emitting": "emitting",
+        "in_state": "in state",
+        "recent_events": "Recent transitions",
+        "sys_stage": "Stage timings",
+        "sys_no_scan": "No scan yet",
+        "sys_threads": "Threads",
+        "sys_uptime": "Uptime",
+        "sys_waiters": "Long-poll clients",
+        "sys_version": "State version",
+        "sys_idx_err": "Indexer errors",
+        "sys_ana_err": "Analyzer errors",
     },
     "ko": {
         "connecting": "연결 중…",
@@ -165,6 +184,21 @@ _STRINGS = {
         "help_q": "이 오버레이 토글",
         "activity_findings": "findings",
         "activity_files": "파일",
+        "system_title": "시스템 · 파이프라인",
+        "system_hint": "스레드 · analyzer 타이밍 · 상태 머신",
+        "phase_starting": "시작 중", "phase_idle": "대기",
+        "phase_detecting": "감지 중", "phase_debouncing": "디바운스",
+        "phase_scanning": "스캔 중", "phase_emitting": "전송",
+        "in_state": "이 상태",
+        "recent_events": "최근 상태 전환",
+        "sys_stage": "단계별 소요",
+        "sys_no_scan": "스캔 대기 중",
+        "sys_threads": "스레드",
+        "sys_uptime": "가동",
+        "sys_waiters": "long-poll 클라이언트",
+        "sys_version": "상태 버전",
+        "sys_idx_err": "인덱서 오류",
+        "sys_ana_err": "analyzer 오류",
     },
 }
 
@@ -178,6 +212,26 @@ class _State:
         self.scanning = False
         self.activity: collections.deque = collections.deque(maxlen=ACTIVITY_LEN)
         self.prev_ids: set[str] = set()
+        # Pipeline state machine + system telemetry surfaced to the UI.
+        self.phase = "starting"     # idle | detecting | debouncing | scanning | emitting
+        self.phase_at = time.monotonic()
+        self.waiters = 0            # long-poll clients currently blocked in wait_after
+        self.events: collections.deque = collections.deque(maxlen=30)
+        self.started_at = time.time()
+
+    def set_phase(self, phase: str, detail: str = "") -> None:
+        with self.cond:
+            now = time.monotonic()
+            elapsed = now - self.phase_at
+            self.events.appendleft({
+                "at": datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3],
+                "phase": phase,
+                "detail": detail,
+                "prev_ms": round(elapsed * 1000),
+            })
+            self.phase = phase
+            self.phase_at = now
+            self.cond.notify_all()
 
     def set(self, envelope: dict) -> None:
         with self.cond:
@@ -202,13 +256,34 @@ class _State:
         with self.cond:
             if self.version > since:
                 return self.version, self.envelope, self.scanning
-            self.cond.wait(timeout=timeout)
+            self.waiters += 1
+            self.cond.notify_all()   # let system.json see the new waiter count
+            try:
+                self.cond.wait(timeout=timeout)
+            finally:
+                self.waiters -= 1
             return self.version, self.envelope, self.scanning
 
     def set_scanning(self, on: bool) -> None:
         with self.cond:
             self.scanning = on
             self.cond.notify_all()
+
+    def snapshot_system(self) -> dict:
+        """Runtime telemetry — safe to read without touching the envelope."""
+        with self.cond:
+            return {
+                "phase": self.phase,
+                "phase_elapsed_ms": round((time.monotonic() - self.phase_at) * 1000),
+                "waiters": self.waiters,
+                "version": self.version,
+                "uptime_s": round(time.time() - self.started_at, 1),
+                "threads": [
+                    {"name": t.name, "daemon": t.daemon, "alive": t.is_alive()}
+                    for t in threading.enumerate()
+                ],
+                "events": list(self.events),
+            }
 
 
 _state = _State()
@@ -227,9 +302,48 @@ def _counts_by_analyzer(findings: list[dict]) -> list[dict]:
 
 
 def _scan(repo: Path) -> dict:
-    """Run analyzers + annotate each finding with `baselined` bool and
-    a `rationale` string. Baseline is re-read on every scan."""
-    env = _run_once(repo)
+    """Analyzer pipeline instrumented for the SYSTEM panel.
+
+    Records per-stage wall time (changeset, indexing, each analyzer) and
+    indexer errors, then packages the envelope with baseline + rationale
+    annotations. All stage transitions are pushed into _state.events so
+    the UI can render the pipeline as it runs."""
+    t0 = time.perf_counter()
+    _state.set_phase("scanning", "full_scan")
+    cs = full_scan(repo)
+    t_cs = time.perf_counter()
+
+    _state.set_phase("scanning", f"indexing {len(cs.files)} files")
+    indices, index_errors = {}, []
+    for fc in cs.files:
+        try:
+            indices[fc.path] = index_file(fc.path, fc.absolute)
+        except Exception as e:
+            index_errors.append({"file": fc.path, "kind": type(e).__name__,
+                                 "message": str(e)[:200]})
+    t_idx = time.perf_counter()
+
+    analyzer_timings, analyzer_errors, all_findings = [], [], []
+    for a in ANALYZERS:
+        _state.set_phase("scanning", f"analyze {a.id}")
+        ta = time.perf_counter()
+        try:
+            fs = a.analyze(cs, indices)
+            all_findings.extend(fs)
+        except Exception as e:
+            fs = []
+            analyzer_errors.append({"analyzer": a.id, "kind": type(e).__name__,
+                                    "message": str(e)[:200]})
+        analyzer_timings.append({"id": a.id, "ms": round((time.perf_counter() - ta) * 1000),
+                                 "findings": len(fs)})
+
+    _state.set_phase("emitting")
+    env = to_json(
+        repo=str(repo.resolve()),
+        scope={"kind": "full", "base": None, "head": "working"},
+        findings=all_findings,
+        files_scanned=len(indices),
+    )
     baselined = bl.load(repo)
     env["has_baseline"] = baselined is not None
     baselined = baselined or set()
@@ -240,13 +354,27 @@ def _scan(repo: Path) -> dict:
         f["rationale_ko"] = _RATIONALES["ko"].get(aid, "")
     env["summary"]["baselined"] = sum(1 for f in env["findings"] if f["baselined"])
     env["summary"]["new"] = len(env["findings"]) - env["summary"]["baselined"]
+
+    env["timings"] = {
+        "total_ms": round((time.perf_counter() - t0) * 1000),
+        "changeset_ms": round((t_cs - t0) * 1000),
+        "index_ms": round((t_idx - t_cs) * 1000),
+        "analyzers": analyzer_timings,
+    }
+    env["errors"] = {
+        "index": index_errors[:20],       # cap so a broken repo can't flood
+        "analyzer": analyzer_errors,
+        "index_total": len(index_errors),
+    }
     return env
 
 
 def _watch_loop(repo: Path) -> None:
+    _state.set_phase("scanning", "cold start")
     _state.set_scanning(True)
     _state.set(_scan(repo))
     _state.set_scanning(False)
+    _state.set_phase("idle")
 
     prev = _snapshot(repo)
     last_change_at: float | None = None
@@ -254,6 +382,9 @@ def _watch_loop(repo: Path) -> None:
         time.sleep(POLL_INTERVAL)
         cur = _snapshot(repo)
         if cur != prev:
+            changed = _changed_paths(prev, cur)
+            _state.set_phase("debouncing",
+                             f"{len(changed)} files (waiting {DEBOUNCE:.1f}s quiet)")
             last_change_at = time.monotonic()
             prev = cur
         elif last_change_at is not None and \
@@ -261,7 +392,15 @@ def _watch_loop(repo: Path) -> None:
             _state.set_scanning(True)
             _state.set(_scan(repo))
             _state.set_scanning(False)
+            _state.set_phase("idle")
             last_change_at = None
+
+
+def _changed_paths(prev: dict[str, float], cur: dict[str, float]) -> list[str]:
+    added = cur.keys() - prev.keys()
+    removed = prev.keys() - cur.keys()
+    modified = {k for k in cur.keys() & prev.keys() if cur[k] != prev[k]}
+    return sorted(added | removed | modified)[:20]
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -283,7 +422,12 @@ class _Handler(BaseHTTPRequestHandler):
                 "version": version,
                 "envelope": envelope,
                 "scanning": scanning,
+                "system": _state.snapshot_system(),
             }, ensure_ascii=False).encode("utf-8")
+            self._send(200, "application/json", body)
+        elif url.path == "/system.json":
+            # Cheap poll for the SYSTEM panel — no envelope round-trip.
+            body = json.dumps(_state.snapshot_system(), ensure_ascii=False).encode("utf-8")
             self._send(200, "application/json", body)
         else:
             self._send(404, "text/plain", b"not found")
@@ -366,7 +510,7 @@ h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
 .count { color: var(--muted); font-size: 0.85rem; margin-left: auto; }
 
 main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  grid-template-rows: minmax(0, 1fr) 180px; gap: 0.5rem; min-height: 0; }
+  grid-template-rows: minmax(0, 1fr) 170px 150px; gap: 0.5rem; min-height: 0; }
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
   display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .panel > h2 { margin: 0; padding: 0.4rem 0.75rem;
@@ -378,6 +522,37 @@ main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
 .risk { grid-column: 1; grid-row: 1; }
 .evidence { grid-column: 2; grid-row: 1 / span 2; }
 .delta { grid-column: 1; grid-row: 2; }
+.system { grid-column: 1 / span 2; grid-row: 3; }
+.system .panel-body { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 0; min-height: 0; }
+.system .panel-body > div { padding: 0.5rem 0.75rem; overflow: auto; }
+.system .panel-body > div + div { border-left: 1px solid var(--border); }
+.phase-badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 3px;
+  font-family: ui-monospace, monospace; font-size: 0.75rem; font-weight: 600;
+  letter-spacing: 0.05em; text-transform: uppercase; }
+.phase-badge.idle { background: color-mix(in srgb, var(--live) 15%, transparent); color: var(--live); }
+.phase-badge.scanning { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+.phase-badge.debouncing { background: color-mix(in srgb, var(--info) 20%, transparent); color: var(--info); }
+.phase-badge.emitting { background: color-mix(in srgb, var(--info) 15%, transparent); color: var(--info); }
+.phase-badge.starting { background: var(--stripe); color: var(--muted); }
+.event-log { font-family: ui-monospace, monospace; font-size: 0.72rem; color: var(--muted);
+  display: flex; flex-direction: column; gap: 0.1rem; margin-top: 0.4rem; }
+.event-log .row { display: grid; grid-template-columns: 6em 6em 1fr auto; gap: 0.35rem; }
+.event-log .row .p { color: var(--fg); font-weight: 600; }
+.event-log .row .ms { text-align: right; opacity: 0.7; }
+.timing-row { display: grid; grid-template-columns: 11em 1fr 4em; gap: 0.4rem;
+  align-items: center; font-size: 0.75rem; margin: 0.1rem 0; }
+.timing-row .name { font-family: ui-monospace, monospace; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timing-row .bar { height: 0.45rem; background: var(--stripe); border-radius: 2px; overflow: hidden; }
+.timing-row .bar > span { display: block; height: 100%; background: var(--info); }
+.timing-row .ms { font-family: ui-monospace, monospace; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stats { display: grid; grid-template-columns: 1fr auto; row-gap: 0.15rem; column-gap: 0.5rem; font-size: 0.78rem; }
+.stats .k { color: var(--muted); }
+.stats .v { font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.stats .v.warn { color: var(--warn); font-weight: 600; }
+.thread-list { list-style: none; padding: 0; margin: 0.4rem 0 0; font-family: ui-monospace, monospace; font-size: 0.72rem; }
+.thread-list li { display: flex; justify-content: space-between; color: var(--muted); }
+.thread-list li .live { color: var(--live); }
+.thread-list li .dead { color: var(--block); }
 .evidence-empty { padding: 1.5rem; color: var(--muted); font-size: 0.85rem; text-align: center; }
 
 table { width: 100%; border-collapse: collapse; }
@@ -529,6 +704,16 @@ tr.finding:hover { background: var(--stripe); }
     <div class="panel-body" style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
       <div id="chart" style="border-right:1px solid var(--border);overflow:auto;"></div>
       <div id="activity" class="activity"></div>
+    </div>
+  </section>
+
+  <section class="panel system">
+    <h2><span data-t="system_title">System · pipeline</span>
+      <span data-t="system_hint" style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">threads · analyzer timings · state machine</span></h2>
+    <div class="panel-body">
+      <div id="sys-pipeline"></div>
+      <div id="sys-timings"></div>
+      <div id="sys-threads"></div>
     </div>
   </section>
 </main>
@@ -801,6 +986,85 @@ for (const id of ["f-block", "f-warn", "f-info"]) {
   document.getElementById(id).addEventListener("change", applyFilter);
 }
 document.getElementById("q").addEventListener("input", applyFilter);
+
+function renderSystem(sys, envTimings, envErrors) {
+  // 1) Pipeline column: current phase badge + elapsed + recent state transitions.
+  const pipeEl = document.getElementById("sys-pipeline");
+  const phase = sys.phase || "idle";
+  const phaseName = t("phase_" + phase) || phase;
+  const events = (sys.events || []).slice(0, 6);
+  pipeEl.innerHTML = `
+    <div><span class="phase-badge ${phase}">${phaseName}</span>
+      <span style="margin-left:0.4rem;font-family:ui-monospace,monospace;font-size:0.72rem;color:var(--muted);">
+        ${sys.phase_elapsed_ms}ms ${t("in_state")}</span></div>
+    <div style="font-size:0.7rem;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-top:0.5rem;">${t("recent_events")}</div>
+    <div class="event-log">
+      ${events.map(e => `
+        <div class="row">
+          <span>${esc(e.at)}</span>
+          <span class="p">${esc(t("phase_" + e.phase) || e.phase)}</span>
+          <span>${esc(e.detail || "")}</span>
+          <span class="ms">${e.prev_ms}ms</span>
+        </div>`).join("")}
+    </div>`;
+
+  // 2) Timings column: last-scan per-analyzer bar chart.
+  const timEl = document.getElementById("sys-timings");
+  if (envTimings && envTimings.analyzers) {
+    const rows = envTimings.analyzers;
+    const max = Math.max(...rows.map(r => r.ms), 1);
+    timEl.innerHTML = `
+      <div style="font-size:0.7rem;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;">
+        ${t("sys_stage")}
+        <span style="float:right;font-family:ui-monospace,monospace;">
+          total ${envTimings.total_ms}ms · index ${envTimings.index_ms}ms</span>
+      </div>
+      <div style="margin-top:0.3rem;">
+        ${rows.map(r => `
+          <div class="timing-row">
+            <span class="name" title="${esc(r.id)}">${esc(r.id)}</span>
+            <span class="bar"><span style="width:${(r.ms/max*100).toFixed(1)}%"></span></span>
+            <span class="ms">${r.ms}ms</span>
+          </div>`).join("")}
+      </div>`;
+  } else {
+    timEl.innerHTML = `<div class="chart-empty">${t("sys_no_scan")}</div>`;
+  }
+
+  // 3) Threads / stats column.
+  const thEl = document.getElementById("sys-threads");
+  const threads = sys.threads || [];
+  const errIndex = envErrors ? envErrors.index_total || 0 : 0;
+  const errAna = envErrors ? (envErrors.analyzer || []).length : 0;
+  thEl.innerHTML = `
+    <div class="stats">
+      <span class="k">${t("sys_uptime")}</span><span class="v">${sys.uptime_s}s</span>
+      <span class="k">${t("sys_version")}</span><span class="v">v${sys.version}</span>
+      <span class="k">${t("sys_waiters")}</span><span class="v">${sys.waiters}</span>
+      <span class="k">${t("sys_idx_err")}</span><span class="v${errIndex ? ' warn' : ''}">${errIndex}</span>
+      <span class="k">${t("sys_ana_err")}</span><span class="v${errAna ? ' warn' : ''}">${errAna}</span>
+    </div>
+    <div style="font-size:0.7rem;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-top:0.5rem;">${t("sys_threads")}</div>
+    <ul class="thread-list">
+      ${threads.map(t2 => `<li>
+        <span>${esc(t2.name)}${t2.daemon ? " (d)" : ""}</span>
+        <span class="${t2.alive ? "live" : "dead"}">${t2.alive ? "●" : "○"}</span>
+      </li>`).join("")}
+    </ul>`;
+}
+
+async function pollSystem() {
+  while (true) {
+    try {
+      const r = await fetch("/system.json");
+      const sys = await r.json();
+      const env = window.__lastEnvelope;
+      renderSystem(sys, env ? env.timings : null, env ? env.errors : null);
+    } catch {}
+    await new Promise(r => setTimeout(r, 500));
+  }
+}
+pollSystem();
 
 async function poll() {
   const dot = document.getElementById("dot");
