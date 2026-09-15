@@ -101,7 +101,7 @@ An LLM reviewer that adopts the industry causal frame ("warns high →
 risk high → prompt user to refactor") will inherit the same
 misdirection. The corrective is upstream of the review-engine choice.
 
-## 5.3 What this study does not settle
+## 5.4 What this study does not settle
 
 We do not argue that duplication or exception-swallowing are
 *good*. We argue only that measuring their density in a snapshot is a
