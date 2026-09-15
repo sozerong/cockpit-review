@@ -178,12 +178,15 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def cmd_serve(repo: Path, port: int = 8765) -> int:
+def cmd_serve(repo: Path, port: int = 8765, host: str = "127.0.0.1") -> int:
     t = threading.Thread(target=_watch_loop, args=(repo,), daemon=True)
     t.start()
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
-    url = f"http://127.0.0.1:{port}"
+    httpd = ThreadingHTTPServer((host, port), _Handler)
+    shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+    url = f"http://{shown}:{port}"
     print(f"cockpit serve · {url}  (Ctrl-C to stop)")
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        print(f"  listening on {host}:{port} — reachable from other hosts on this network")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
