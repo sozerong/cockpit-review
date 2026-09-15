@@ -137,6 +137,7 @@ _STRINGS = {
         "phase_starting": "starting", "phase_idle": "idle",
         "phase_detecting": "detecting", "phase_debouncing": "debouncing",
         "phase_scanning": "scanning", "phase_emitting": "emitting",
+        "phase_stuck_suffix": " · stuck",
         "in_state": "in state",
         "recent_events": "Recent transitions",
         "sys_stage": "Stage timings",
@@ -147,6 +148,14 @@ _STRINGS = {
         "sys_version": "State version",
         "sys_idx_err": "Indexer errors",
         "sys_ana_err": "Analyzer errors",
+        "sys_version_short": "v",
+        "sys_uptime_short": "up",
+        "sys_waiters_short": "waiters",
+        "sys_threads_short": "threads",
+        "sys_timing_total": "total",
+        "sys_timing_index": "index",
+        "sys_timing_changeset": "parse",
+        "sys_waiting": "waiting for first scan…",
     },
     "ko": {
         "connecting": "연결 중…",
@@ -189,6 +198,7 @@ _STRINGS = {
         "phase_starting": "시작 중", "phase_idle": "대기",
         "phase_detecting": "감지 중", "phase_debouncing": "디바운스",
         "phase_scanning": "스캔 중", "phase_emitting": "전송",
+        "phase_stuck_suffix": " · 정체",
         "in_state": "이 상태",
         "recent_events": "최근 상태 전환",
         "sys_stage": "단계별 소요",
@@ -199,6 +209,14 @@ _STRINGS = {
         "sys_version": "상태 버전",
         "sys_idx_err": "인덱서 오류",
         "sys_ana_err": "analyzer 오류",
+        "sys_version_short": "v",
+        "sys_uptime_short": "가동",
+        "sys_waiters_short": "대기 클라",
+        "sys_threads_short": "스레드",
+        "sys_timing_total": "합계",
+        "sys_timing_index": "인덱스",
+        "sys_timing_changeset": "파싱",
+        "sys_waiting": "첫 스캔 대기 중…",
     },
 }
 
@@ -510,7 +528,7 @@ h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
 .count { color: var(--muted); font-size: 0.85rem; margin-left: auto; }
 
 main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  grid-template-rows: minmax(0, 1fr) 170px 150px; gap: 0.5rem; min-height: 0; }
+  grid-template-rows: minmax(0, 1fr) 170px 210px; gap: 0.5rem; min-height: 0; }
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
   display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .panel > h2 { margin: 0; padding: 0.4rem 0.75rem;
@@ -523,36 +541,54 @@ main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
 .evidence { grid-column: 2; grid-row: 1 / span 2; }
 .delta { grid-column: 1; grid-row: 2; }
 .system { grid-column: 1 / span 2; grid-row: 3; }
-.system .panel-body { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 0; min-height: 0; }
-.system .panel-body > div { padding: 0.5rem 0.75rem; overflow: auto; }
-.system .panel-body > div + div { border-left: 1px solid var(--border); }
-.phase-badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 3px;
-  font-family: ui-monospace, monospace; font-size: 0.75rem; font-weight: 600;
-  letter-spacing: 0.05em; text-transform: uppercase; }
-.phase-badge.idle { background: color-mix(in srgb, var(--live) 15%, transparent); color: var(--live); }
-.phase-badge.scanning { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
-.phase-badge.debouncing { background: color-mix(in srgb, var(--info) 20%, transparent); color: var(--info); }
-.phase-badge.emitting { background: color-mix(in srgb, var(--info) 15%, transparent); color: var(--info); }
-.phase-badge.starting { background: var(--stripe); color: var(--muted); }
-.event-log { font-family: ui-monospace, monospace; font-size: 0.72rem; color: var(--muted);
-  display: flex; flex-direction: column; gap: 0.1rem; margin-top: 0.4rem; }
-.event-log .row { display: grid; grid-template-columns: 6em 6em 1fr auto; gap: 0.35rem; }
-.event-log .row .p { color: var(--fg); font-weight: 600; }
-.event-log .row .ms { text-align: right; opacity: 0.7; }
-.timing-row { display: grid; grid-template-columns: 11em 1fr 4em; gap: 0.4rem;
-  align-items: center; font-size: 0.75rem; margin: 0.1rem 0; }
-.timing-row .name { font-family: ui-monospace, monospace; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.timing-row .bar { height: 0.45rem; background: var(--stripe); border-radius: 2px; overflow: hidden; }
-.timing-row .bar > span { display: block; height: 100%; background: var(--info); }
-.timing-row .ms { font-family: ui-monospace, monospace; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
-.stats { display: grid; grid-template-columns: 1fr auto; row-gap: 0.15rem; column-gap: 0.5rem; font-size: 0.78rem; }
-.stats .k { color: var(--muted); }
-.stats .v { font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; }
-.stats .v.warn { color: var(--warn); font-weight: 600; }
-.thread-list { list-style: none; padding: 0; margin: 0.4rem 0 0; font-family: ui-monospace, monospace; font-size: 0.72rem; }
-.thread-list li { display: flex; justify-content: space-between; color: var(--muted); }
-.thread-list li .live { color: var(--live); }
-.thread-list li .dead { color: var(--block); }
+.system .panel-body { display: grid; grid-template-rows: 26px 1fr; padding: 0; min-height: 0; }
+.sys-stats { display: flex; gap: 1rem; align-items: center; padding: 0 0.9rem;
+  font-family: ui-monospace, monospace; font-size: 0.72rem; color: var(--muted);
+  border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.sys-stats .k { opacity: 0.65; letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.65rem; margin-right: 0.25rem; }
+.sys-stats .v { color: var(--fg); }
+.sys-stats .v.warn { color: var(--warn); font-weight: 600; }
+.sys-stats .thread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  vertical-align: middle; margin-right: 0.3rem; background: var(--live); }
+.sys-stats .thread-dot.amber { background: var(--warn); }
+.sys-stats .thread-dot.red { background: var(--block); }
+.sys-stats .spacer { flex: 1; }
+#sys-svg { width: 100%; height: 100%; display: block; overflow: visible; }
+#sys-svg .label { font: 500 11px system-ui, -apple-system, sans-serif; fill: var(--muted); text-anchor: middle; }
+#sys-svg .label.current { fill: var(--fg); }
+#sys-svg .elapsed { font: 500 11px ui-monospace, monospace; fill: var(--fg); text-anchor: middle; font-variant-numeric: tabular-nums; }
+#sys-svg .node { fill: none; stroke: var(--muted); stroke-width: 2; transition: stroke 200ms, fill 200ms; }
+#sys-svg .node.done { fill: color-mix(in srgb, var(--info) 40%, transparent); stroke: var(--info); }
+#sys-svg .node.current { fill: var(--live); stroke: var(--live); }
+#sys-svg .node.current.stuck { fill: var(--warn); stroke: var(--warn); }
+#sys-svg .node.current.err { stroke: var(--block); stroke-width: 2.5; }
+#sys-svg .connector { stroke: var(--muted); stroke-width: 2; transition: stroke 240ms; }
+#sys-svg .connector.done { stroke: var(--info); }
+#sys-svg .ring { fill: none; stroke: var(--live); stroke-width: 2; transform-origin: center; transform: rotate(-90deg); transition: stroke-dashoffset 500ms linear; }
+#sys-svg .pulse { fill: var(--live); opacity: 0.35; animation: sysPulse 1600ms ease-out infinite; }
+#sys-svg .pulse.stuck { fill: var(--warn); animation-duration: 2600ms; }
+@keyframes sysPulse {
+  0%   { r: 22; opacity: 0.5; }
+  100% { r: 34; opacity: 0; }
+}
+#sys-svg .pip { fill: color-mix(in srgb, var(--muted) 40%, transparent); transition: fill 180ms, r 180ms; }
+#sys-svg .pip.done { fill: var(--info); }
+#sys-svg .pip.active { fill: var(--live); r: 4.5; }
+#sys-svg .tim-seg { transition: opacity 220ms; }
+#sys-svg .tim-seg.err { stroke: var(--block); stroke-width: 2; }
+#sys-svg .tim-hdr { font: 500 10px ui-monospace, monospace; fill: var(--muted); font-variant-numeric: tabular-nums; }
+#sys-svg .tim-label { font: 500 9px ui-monospace, monospace; fill: var(--muted); text-anchor: middle; }
+#sys-svg .tim-empty { font: 500 11px system-ui, -apple-system, sans-serif; font-style: italic; fill: var(--muted); text-anchor: middle; }
+#sys-svg .strip-in { animation: stripIn 280ms ease-out; }
+@keyframes stripIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes errorFlash {
+  0%, 100% { stroke: var(--block); } 50% { stroke: transparent; }
+}
+#sys-svg .flash { animation: errorFlash 600ms ease-in-out 2; }
+@media (prefers-reduced-motion: reduce) {
+  #sys-svg .pulse, #sys-svg .strip-in, #sys-svg .flash { animation: none; }
+  #sys-svg .ring { transition: none; }
+}
 .evidence-empty { padding: 1.5rem; color: var(--muted); font-size: 0.85rem; text-align: center; }
 
 table { width: 100%; border-collapse: collapse; }
@@ -709,11 +745,10 @@ tr.finding:hover { background: var(--stripe); }
 
   <section class="panel system">
     <h2><span data-t="system_title">System · pipeline</span>
-      <span data-t="system_hint" style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">threads · analyzer timings · state machine</span></h2>
+      <span data-t="system_hint" style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">state machine · analyzer timings</span></h2>
     <div class="panel-body">
-      <div id="sys-pipeline"></div>
-      <div id="sys-timings"></div>
-      <div id="sys-threads"></div>
+      <div class="sys-stats" id="sys-stats"></div>
+      <svg id="sys-svg" viewBox="0 0 1600 156" preserveAspectRatio="xMidYMid meet" aria-label="pipeline visualization"></svg>
     </div>
   </section>
 </main>
@@ -987,70 +1022,143 @@ for (const id of ["f-block", "f-warn", "f-info"]) {
 }
 document.getElementById("q").addEventListener("input", applyFilter);
 
-function renderSystem(sys, envTimings, envErrors) {
-  // 1) Pipeline column: current phase badge + elapsed + recent state transitions.
-  const pipeEl = document.getElementById("sys-pipeline");
-  const phase = sys.phase || "idle";
-  const phaseName = t("phase_" + phase) || phase;
-  const events = (sys.events || []).slice(0, 6);
-  pipeEl.innerHTML = `
-    <div><span class="phase-badge ${phase}">${phaseName}</span>
-      <span style="margin-left:0.4rem;font-family:ui-monospace,monospace;font-size:0.72rem;color:var(--muted);">
-        ${sys.phase_elapsed_ms}ms ${t("in_state")}</span></div>
-    <div style="font-size:0.7rem;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-top:0.5rem;">${t("recent_events")}</div>
-    <div class="event-log">
-      ${events.map(e => `
-        <div class="row">
-          <span>${esc(e.at)}</span>
-          <span class="p">${esc(t("phase_" + e.phase) || e.phase)}</span>
-          <span>${esc(e.detail || "")}</span>
-          <span class="ms">${e.prev_ms}ms</span>
-        </div>`).join("")}
-    </div>`;
+const SYS_PHASES = ["starting", "idle", "debouncing", "scanning", "emitting"];
+const SYS_NODE_X = [80, 240, 400, 560, 720];
+const SYS_NODE_Y = 60;
+const SYS_NODE_R = 22;
+const SYS_STRIP_X = 820;
+const SYS_STRIP_W = 740;
+let sysLastVersion = -1;
 
-  // 2) Timings column: last-scan per-analyzer bar chart.
-  const timEl = document.getElementById("sys-timings");
-  if (envTimings && envTimings.analyzers) {
-    const rows = envTimings.analyzers;
-    const max = Math.max(...rows.map(r => r.ms), 1);
-    timEl.innerHTML = `
-      <div style="font-size:0.7rem;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;">
-        ${t("sys_stage")}
-        <span style="float:right;font-family:ui-monospace,monospace;">
-          total ${envTimings.total_ms}ms · index ${envTimings.index_ms}ms</span>
-      </div>
-      <div style="margin-top:0.3rem;">
-        ${rows.map(r => `
-          <div class="timing-row">
-            <span class="name" title="${esc(r.id)}">${esc(r.id)}</span>
-            <span class="bar"><span style="width:${(r.ms/max*100).toFixed(1)}%"></span></span>
-            <span class="ms">${r.ms}ms</span>
-          </div>`).join("")}
-      </div>`;
-  } else {
-    timEl.innerHTML = `<div class="chart-empty">${t("sys_no_scan")}</div>`;
+function currentAnalyzerFromEvents(events) {
+  // Latest event of shape "analyze <id>" wins.
+  for (const e of events || []) {
+    if (e.phase === "scanning" && typeof e.detail === "string" && e.detail.startsWith("analyze ")) {
+      return e.detail.slice(8).trim();
+    }
   }
+  return null;
+}
 
-  // 3) Threads / stats column.
-  const thEl = document.getElementById("sys-threads");
+function renderSystem(sys, envTimings, envErrors) {
+  const phase = sys.phase || "idle";
+  const phaseIdx = Math.max(0, SYS_PHASES.indexOf(phase));
+  const elapsed = sys.phase_elapsed_ms || 0;
+  const stuck = elapsed > 30000;
   const threads = sys.threads || [];
   const errIndex = envErrors ? envErrors.index_total || 0 : 0;
   const errAna = envErrors ? (envErrors.analyzer || []).length : 0;
-  thEl.innerHTML = `
-    <div class="stats">
-      <span class="k">${t("sys_uptime")}</span><span class="v">${sys.uptime_s}s</span>
-      <span class="k">${t("sys_version")}</span><span class="v">v${sys.version}</span>
-      <span class="k">${t("sys_waiters")}</span><span class="v">${sys.waiters}</span>
-      <span class="k">${t("sys_idx_err")}</span><span class="v${errIndex ? ' warn' : ''}">${errIndex}</span>
-      <span class="k">${t("sys_ana_err")}</span><span class="v${errAna ? ' warn' : ''}">${errAna}</span>
-    </div>
-    <div style="font-size:0.7rem;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-top:0.5rem;">${t("sys_threads")}</div>
-    <ul class="thread-list">
-      ${threads.map(t2 => `<li>
-        <span>${esc(t2.name)}${t2.daemon ? " (d)" : ""}</span>
-        <span class="${t2.alive ? "live" : "dead"}">${t2.alive ? "●" : "○"}</span>
-      </li>`).join("")}
-    </ul>`;
+
+  // ---- stats header ----
+  const threadClass = errIndex || errAna ? "red" : (threads.length > 8 ? "amber" : "");
+  document.getElementById("sys-stats").innerHTML = `
+    <span><span class="k">${t("sys_version_short")}</span><span class="v">${sys.version}</span></span>
+    <span><span class="k">${t("sys_uptime_short")}</span><span class="v">${sys.uptime_s}s</span></span>
+    <span><span class="k">${t("sys_waiters_short")}</span><span class="v">${sys.waiters}</span></span>
+    <span class="spacer"></span>
+    <span title="${threads.map(x=>x.name+(x.alive?' ●':' ○')).join(' · ')}">
+      <span class="thread-dot ${threadClass}"></span><span class="v">${threads.length}</span> <span class="k">${t("sys_threads_short")}</span>
+    </span>
+    ${errIndex ? `<span><span class="k">${t("sys_idx_err")}</span><span class="v warn">${errIndex}</span></span>` : ""}
+    ${errAna ? `<span><span class="k">${t("sys_ana_err")}</span><span class="v warn">${errAna}</span></span>` : ""}
+  `;
+
+  // ---- SVG: state spine ----
+  const svg = document.getElementById("sys-svg");
+  const parts = [];
+  // Connectors between nodes.
+  for (let i = 0; i < SYS_NODE_X.length - 1; i++) {
+    const cls = i < phaseIdx ? "connector done" : "connector";
+    parts.push(`<line class="${cls}" x1="${SYS_NODE_X[i] + SYS_NODE_R}" y1="${SYS_NODE_Y}" x2="${SYS_NODE_X[i+1] - SYS_NODE_R}" y2="${SYS_NODE_Y}"/>`);
+  }
+  // Nodes.
+  for (let i = 0; i < SYS_NODE_X.length; i++) {
+    const isCurrent = i === phaseIdx;
+    const isDone = i < phaseIdx;
+    const hasErr = isCurrent && phase === "scanning" && errIndex > 0;
+    const cls = ["node"];
+    if (isDone) cls.push("done");
+    if (isCurrent) cls.push("current");
+    if (isCurrent && stuck) cls.push("stuck");
+    if (hasErr) cls.push("err");
+    const x = SYS_NODE_X[i];
+    parts.push(`<circle class="${cls.join(' ')}" cx="${x}" cy="${SYS_NODE_Y}" r="${SYS_NODE_R}"/>`);
+
+    // Pulse ring around current.
+    if (isCurrent) {
+      parts.push(`<circle class="pulse${stuck ? ' stuck' : ''}" cx="${x}" cy="${SYS_NODE_Y}" r="22"/>`);
+      // Progress ring — dashoffset based on (elapsed % 2000) / 2000
+      const circ = 2 * Math.PI * 28;
+      const frac = (elapsed % 2000) / 2000;
+      const off = circ * (1 - frac);
+      parts.push(`<circle class="ring" cx="${x}" cy="${SYS_NODE_Y}" r="28" stroke-dasharray="${circ.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}"/>`);
+    }
+    // Label + elapsed.
+    parts.push(`<text class="label${isCurrent ? ' current' : ''}" x="${x}" y="${SYS_NODE_Y + SYS_NODE_R + 18}">${esc(t("phase_" + SYS_PHASES[i]))}${isCurrent && stuck ? esc(t("phase_stuck_suffix")) : ""}</text>`);
+    if (isCurrent) {
+      const secs = elapsed >= 1000 ? (elapsed / 1000).toFixed(1) + "s" : elapsed + "ms";
+      parts.push(`<text class="elapsed" x="${x}" y="${SYS_NODE_Y + SYS_NODE_R + 34}">${secs}</text>`);
+    }
+  }
+
+  // ---- Analyzer pips under 'scanning' node (index 3, x=560) ----
+  const scanX = SYS_NODE_X[3];
+  const pipY = SYS_NODE_Y + SYS_NODE_R + 48;
+  // Canonical analyzer order: prefer envTimings, else derive from events.
+  let analyzerIds = [];
+  if (envTimings && envTimings.analyzers) {
+    analyzerIds = envTimings.analyzers.map(a => a.id);
+  }
+  const currentAnalyzer = phase === "scanning" ? currentAnalyzerFromEvents(sys.events) : null;
+  if (analyzerIds.length) {
+    const spacing = 12;
+    const startX = scanX - ((analyzerIds.length - 1) * spacing) / 2;
+    let hitCurrent = false;
+    for (let i = 0; i < analyzerIds.length; i++) {
+      const id = analyzerIds[i];
+      let cls = "pip";
+      if (phase === "scanning" && currentAnalyzer) {
+        if (id === currentAnalyzer) { cls += " active"; hitCurrent = true; }
+        else if (!hitCurrent) cls += " done";
+      } else if (phase === "idle" || phase === "emitting") {
+        cls += " done";
+      }
+      parts.push(`<circle class="${cls}" cx="${startX + i * spacing}" cy="${pipY}" r="3.5"><title>${esc(id)}</title></circle>`);
+    }
+  }
+
+  // ---- Timing strip (right region) ----
+  const stripFresh = envTimings && sys.version !== sysLastVersion;
+  if (envTimings && envTimings.analyzers && envTimings.analyzers.length) {
+    const total = envTimings.total_ms || 1;
+    const header = `${envTimings.total_ms}ms ${t("sys_timing_total")} · ${envTimings.index_ms}ms ${t("sys_timing_index")} · ${envTimings.changeset_ms}ms ${t("sys_timing_changeset")}`;
+    parts.push(`<text class="tim-hdr" x="${SYS_STRIP_X}" y="26" text-anchor="start">${esc(header)}</text>`);
+    const barY = 44, barH = 28;
+    let cursor = SYS_STRIP_X;
+    const gClass = stripFresh ? "strip-in" : "";
+    parts.push(`<g class="${gClass}">`);
+    for (const a of envTimings.analyzers) {
+      const w = Math.max(2, (a.ms / total) * SYS_STRIP_W);
+      let fill = "var(--info)";
+      if (a.ms >= 200 && a.findings > 0 && a.ms >= 500) fill = "var(--block)";
+      else if (a.ms >= 200) fill = "var(--warn)";
+      else if (a.ms >= 50) fill = "var(--live)";
+      const errCls = errAna && a.ms === 0 ? " err" : "";
+      parts.push(`<rect class="tim-seg${errCls}" x="${cursor.toFixed(2)}" y="${barY}" width="${(w - 1).toFixed(2)}" height="${barH}" fill="${fill}"><title>${esc(a.id)} — ${a.ms}ms · ${a.findings} findings</title></rect>`);
+      // Label if segment is wide enough (>=44 viewbox units).
+      if (w >= 44) {
+        const short = a.id.split(".").slice(-1)[0];
+        parts.push(`<text class="tim-label" x="${(cursor + w / 2).toFixed(2)}" y="${barY + barH + 12}">${esc(short)}</text>`);
+      }
+      cursor += w;
+    }
+    parts.push(`</g>`);
+    sysLastVersion = sys.version;
+  } else {
+    parts.push(`<text class="tim-empty" x="${SYS_STRIP_X + SYS_STRIP_W / 2}" y="72">${esc(t("sys_waiting"))}</text>`);
+  }
+
+  svg.innerHTML = parts.join("");
 }
 
 async function pollSystem() {

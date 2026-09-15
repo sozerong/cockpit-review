@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **UI: SYSTEM panel visualization (v2)** — text tables replaced with an
+  SVG pipeline spine per designer spec. 5-node state machine
+  (starting → idle → debouncing → scanning → emitting) as horizontal
+  flow with pulse ring + progress ring on the current node, 8 analyzer
+  pips lit sequentially beneath the `scanning` node, proportional
+  timing strip on the right (last-scan analyzer wall times color-coded
+  by threshold), and a compact stats header (version, uptime, waiters,
+  thread health dot). Stuck-state (>30s in a phase), indexer/analyzer
+  errors, and reduced-motion all honored.
 - **UI: SYSTEM panel** — bottom strip in the live dashboard exposes the
   internals: current pipeline phase (idle / detecting / debouncing /
   scanning / emitting) with elapsed timer, per-scan per-analyzer wall
