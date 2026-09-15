@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
+from . import baseline as bl
 from .watch import _run_once, _snapshot, POLL_INTERVAL, DEBOUNCE
 
 
@@ -54,9 +55,23 @@ class _State:
 _state = _State()
 
 
+def _scan(repo: Path) -> dict:
+    """Run analyzers + annotate each finding with `baselined` bool.
+
+    Baseline is re-read on every scan so the UI reacts if the user runs
+    `cockpit baseline save` in another terminal."""
+    env = _run_once(repo)
+    baselined = bl.load(repo) or set()
+    for f in env["findings"]:
+        f["baselined"] = f["id"] in baselined
+    env["summary"]["baselined"] = sum(1 for f in env["findings"] if f["baselined"])
+    env["summary"]["new"] = len(env["findings"]) - env["summary"]["baselined"]
+    return env
+
+
 def _watch_loop(repo: Path) -> None:
     _state.set_scanning(True)
-    _state.set(_run_once(repo))
+    _state.set(_scan(repo))
     _state.set_scanning(False)
 
     prev = _snapshot(repo)
@@ -70,7 +85,7 @@ def _watch_loop(repo: Path) -> None:
         elif last_change_at is not None and \
                 time.monotonic() - last_change_at >= DEBOUNCE:
             _state.set_scanning(True)
-            _state.set(_run_once(repo))
+            _state.set(_scan(repo))
             _state.set_scanning(False)
             last_change_at = None
 
@@ -170,10 +185,29 @@ table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
 tr:nth-child(even) { background: var(--stripe); }
 tr.finding.fresh { animation: flash 1.2s ease-out; }
+tr.finding.selected { outline: 2px solid var(--live); outline-offset: -2px; }
+tr.finding.baselined td.loc::after { content: " · baseline"; color: var(--muted); font-size: 0.75rem; }
 @keyframes flash {
   0% { background: color-mix(in srgb, var(--live) 30%, var(--bg)); }
   100% { background: transparent; }
 }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
+.seg button { border: 0; background: var(--bg); color: var(--fg); padding: 0.2rem 0.6rem;
+  font: inherit; font-size: 0.85rem; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.active { background: var(--live); color: #fff; }
+kbd { font-family: ui-monospace, monospace; font-size: 0.75rem; padding: 0.05rem 0.35rem;
+  border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 3px;
+  background: var(--stripe); color: var(--fg); }
+.help-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex;
+  align-items: center; justify-content: center; z-index: 10; }
+.help-overlay[hidden] { display: none; }
+.help-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 1.25rem 1.5rem; min-width: 320px; max-width: 480px; }
+.help-card h2 { margin: 0 0 0.75rem; font-size: 1rem; }
+.help-card table { border: 0; }
+.help-card td { border: 0; padding: 0.2rem 0.5rem 0.2rem 0; }
+.help-card td:first-child { text-align: right; width: 8em; }
 .sev { display: inline-block; width: 3.3em; padding: 0.05rem 0.35rem; border-radius: 3px;
   font-size: 0.75rem; font-weight: 700; color: #fff; text-align: center; text-transform: uppercase; }
 .sev.block { background: var(--block); }
@@ -203,11 +237,32 @@ tr.finding.expanded .chev::before { transform: rotate(90deg); }
 </header>
 
 <div class="filters">
-  <label><input type="checkbox" id="f-block" checked> block</label>
-  <label><input type="checkbox" id="f-warn" checked> warn</label>
-  <label><input type="checkbox" id="f-info"> info</label>
-  <input type="text" id="q" placeholder="filter by file, analyzer, symbol…">
+  <label><input type="checkbox" id="f-block" checked> block <kbd>1</kbd></label>
+  <label><input type="checkbox" id="f-warn" checked> warn <kbd>2</kbd></label>
+  <label><input type="checkbox" id="f-info"> info <kbd>3</kbd></label>
+  <span class="seg" id="baseline-mode" role="group" aria-label="baseline filter">
+    <button data-mode="new" class="active" title="hide baselined findings (press N)">new only</button>
+    <button data-mode="all" title="show every finding">all</button>
+    <button data-mode="baselined" title="show only baselined findings">baselined</button>
+  </span>
+  <input type="text" id="q" placeholder="filter by file, analyzer, symbol…  /">
   <span class="count" id="count"></span>
+  <button id="help-btn" title="show keyboard shortcuts" style="border:1px solid var(--border);background:var(--bg);color:var(--muted);border-radius:3px;padding:0.15rem 0.5rem;cursor:pointer;font:inherit;font-size:0.85rem;">?</button>
+</div>
+
+<div class="help-overlay" id="help" hidden>
+  <div class="help-card">
+    <h2>keyboard</h2>
+    <table>
+      <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>next / previous finding</td></tr>
+      <tr><td><kbd>Enter</kbd></td><td>expand selected finding</td></tr>
+      <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>toggle block / warn / info</td></tr>
+      <tr><td><kbd>n</kbd></td><td>cycle: new only → all → baselined</td></tr>
+      <tr><td><kbd>/</kbd></td><td>focus search</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>blur search / close this</td></tr>
+      <tr><td><kbd>?</kbd></td><td>toggle this overlay</td></tr>
+    </table>
+  </div>
 </div>
 
 <table>
@@ -226,9 +281,12 @@ tr.finding.expanded .chev::before { transform: rotate(90deg); }
 
 <script>
 const SEV_ORDER = { block: 0, warn: 1, info: 2 };
+const BASELINE_MODES = ["new", "all", "baselined"];
 let version = -1;
 let findings = [];
 let prevIds = new Set();
+let baselineMode = "new";
+let selectedIdx = -1;
 
 function esc(s) { return String(s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
 
@@ -258,7 +316,9 @@ function render(envelope, freshIds) {
   rowsEl.innerHTML = "";
   findings.forEach((f, i) => {
     const tr = document.createElement("tr");
-    tr.className = "finding sev-" + f.severity + (freshIds.has(f.id) ? " fresh" : "");
+    tr.className = "finding sev-" + f.severity
+      + (freshIds.has(f.id) ? " fresh" : "")
+      + (f.baselined ? " baselined" : "");
     tr.dataset.i = i;
     tr.innerHTML = `
       <td><span class="chev"></span></td>
@@ -292,8 +352,11 @@ function applyFilter() {
     const sevOk = (f.severity === "block" && showBlock) ||
                   (f.severity === "warn" && showWarn) ||
                   (f.severity === "info" && showInfo);
+    const bOk = baselineMode === "all" ||
+                (baselineMode === "new" && !f.baselined) ||
+                (baselineMode === "baselined" && f.baselined);
     const qOk = !q || tr.textContent.toLowerCase().includes(q);
-    const visible = sevOk && qOk;
+    const visible = sevOk && bOk && qOk;
     tr.classList.toggle("hidden", !visible);
     tr.nextElementSibling.classList.toggle("hidden", !visible);
     if (!visible) tr.classList.remove("expanded");
@@ -301,7 +364,80 @@ function applyFilter() {
   });
   document.getElementById("count").textContent = `${shown} of ${findings.length}`;
   document.getElementById("empty").hidden = shown > 0;
+  // Clamp selection to a visible row.
+  if (selectedIdx >= 0) {
+    const cur = document.querySelector(`tr.finding[data-i="${selectedIdx}"]`);
+    if (!cur || cur.classList.contains("hidden")) select(nextVisible(-1, +1));
+  }
 }
+
+function nextVisible(from, dir) {
+  const rows = [...document.querySelectorAll("tr.finding:not(.hidden)")];
+  if (rows.length === 0) return -1;
+  const idxs = rows.map(r => +r.dataset.i);
+  if (from < 0) return dir > 0 ? idxs[0] : idxs[idxs.length - 1];
+  const here = idxs.indexOf(from);
+  if (here === -1) return dir > 0 ? idxs[0] : idxs[idxs.length - 1];
+  const next = here + dir;
+  return idxs[Math.max(0, Math.min(idxs.length - 1, next))];
+}
+
+function select(i) {
+  document.querySelectorAll("tr.finding.selected").forEach(r => r.classList.remove("selected"));
+  selectedIdx = i;
+  if (i < 0) return;
+  const tr = document.querySelector(`tr.finding[data-i="${i}"]`);
+  if (tr) {
+    tr.classList.add("selected");
+    tr.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+}
+
+function setBaselineMode(mode) {
+  if (!BASELINE_MODES.includes(mode)) return;
+  baselineMode = mode;
+  document.querySelectorAll("#baseline-mode button").forEach(b =>
+    b.classList.toggle("active", b.dataset.mode === mode));
+  applyFilter();
+}
+
+document.querySelectorAll("#baseline-mode button").forEach(btn =>
+  btn.addEventListener("click", () => setBaselineMode(btn.dataset.mode)));
+
+const help = document.getElementById("help");
+document.getElementById("help-btn").addEventListener("click", () => help.hidden = !help.hidden);
+help.addEventListener("click", e => { if (e.target === help) help.hidden = true; });
+
+document.addEventListener("keydown", e => {
+  const q = document.getElementById("q");
+  if (e.key === "Escape") {
+    if (!help.hidden) { help.hidden = true; return; }
+    if (document.activeElement === q) { q.blur(); return; }
+  }
+  if (document.activeElement === q) return;  // typing in search — let it be
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  switch (e.key) {
+    case "j": select(nextVisible(selectedIdx, +1)); e.preventDefault(); break;
+    case "k": select(nextVisible(selectedIdx, -1)); e.preventDefault(); break;
+    case "Enter": case " ": {
+      if (selectedIdx < 0) return;
+      const tr = document.querySelector(`tr.finding[data-i="${selectedIdx}"]`);
+      if (tr) tr.classList.toggle("expanded");
+      e.preventDefault();
+      break;
+    }
+    case "1": document.getElementById("f-block").click(); break;
+    case "2": document.getElementById("f-warn").click(); break;
+    case "3": document.getElementById("f-info").click(); break;
+    case "n": {
+      const i = BASELINE_MODES.indexOf(baselineMode);
+      setBaselineMode(BASELINE_MODES[(i + 1) % BASELINE_MODES.length]);
+      break;
+    }
+    case "/": q.focus(); q.select(); e.preventDefault(); break;
+    case "?": help.hidden = !help.hidden; break;
+  }
+});
 
 for (const id of ["f-block", "f-warn", "f-info"]) {
   document.getElementById(id).addEventListener("change", applyFilter);

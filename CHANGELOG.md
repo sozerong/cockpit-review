@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **`cockpit serve`** — live dashboard. Watch loop pushes to in-memory state
+  with a monotonic version; browser long-polls, re-renders on change. Newly
+  appeared findings flash. Stdlib only (http.server + threading + urllib).
+- **UI: baseline-diff view** — three-way segment control (new only / all /
+  baselined) on the live dashboard; each finding tagged `baselined: true|false`
+  in the state payload. Default view hides baselined noise, matching the CI
+  gate philosophy.
+- **UI: keyboard shortcuts** — j/k navigate, Enter expand, 1/2/3 toggle
+  severity, n cycle baseline mode, / focus search, Esc blur / close, ? help
+  overlay.
+- **`arg.mutable-default` v1** — flags `def f(x=[])`, `x={}`, `x=set()`,
+  `x=list()`, `x=dict()`. Deterministic single AST shape, `warn`.
 - **`except.reraise-vs-raise` v1** — flags `except X as e: ... raise e`
   where the identifier raised is the `as` alias. Bare `raise` re-raises
   with the original traceback intact; `raise e` truncates it. Deterministic
