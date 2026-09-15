@@ -124,6 +124,10 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--out", type=Path,
                    help="Output path (default: <repo>/cockpit-report.html)")
 
+    s = sub.add_parser("serve", help="Live dashboard — auto-updates on file change")
+    s.add_argument("repo", nargs="?", default=".", type=Path)
+    s.add_argument("--port", type=int, default=8765)
+
     args = p.parse_args(argv)
     if args.cmd == "check":
         use_color = sys.stdout.isatty() and not args.no_color
@@ -137,6 +141,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "report":
         from .ui import cmd_report
         return cmd_report(args.repo, args.out)
+    if args.cmd == "serve":
+        from .serve import cmd_serve
+        return cmd_serve(args.repo, port=args.port)
     return 2
 
 
