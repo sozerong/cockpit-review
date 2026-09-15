@@ -11,6 +11,8 @@ http.server has no chunked streaming primitive and long-poll works fine
 for a single-user dev-loop dashboard.
 """
 from __future__ import annotations
+import collections
+import datetime
 import json
 import threading
 import time
@@ -23,6 +25,37 @@ from .watch import _run_once, _snapshot, POLL_INTERVAL, DEBOUNCE
 
 
 WAIT_TIMEOUT = 25.0     # long-poll ceiling before returning current state
+ACTIVITY_LEN = 12       # rolling scan-event log for the NOW panel
+
+
+# Per-analyzer rationale shown in the evidence pane. Kept next to the
+# analyzer roster so a new analyzer added to __init__.py without a
+# rationale here still renders (falls back to the analyzer id).
+_RATIONALES = {
+    "dup.block":
+        "5+ line duplicate windows inside function bodies. "
+        "String-dominant blocks filtered; tests/examples/docs downgraded; "
+        "clusters of >5 copies collapse to one info.",
+    "risk.error-masking":
+        "except body is only pass/…, split by broadness: "
+        "bare `except:` or `except Exception:` → warn; "
+        "`except SpecificError:` → info.",
+    "except.reraise-vs-raise":
+        "`raise <alias>` in `except X as <alias>:` truncates traceback. "
+        "Bare `raise` preserves it.",
+    "arg.mutable-default":
+        "Default is evaluated once at def-time. `def f(x=[]):` shares "
+        "one list across every call — classic hidden state.",
+    "test.assertion-free":
+        "test_* function with no assert*, pytest.raises, or unittest self.assert*. "
+        "Runs, passes, checks nothing.",
+    "test.always-true-assertion":
+        "assert on a truthy literal (True, non-empty container, non-zero number). "
+        "Always passes regardless of code.",
+    "test.no-test-for-public-symbol":
+        "Public top-level symbol has no test_<name> anywhere in the parallel "
+        "tests/ tree.",
+}
 
 
 class _State:
@@ -32,10 +65,25 @@ class _State:
         self.version = 0
         self.envelope: dict | None = None
         self.scanning = False
+        self.activity: collections.deque = collections.deque(maxlen=ACTIVITY_LEN)
+        self.prev_ids: set[str] = set()
 
     def set(self, envelope: dict) -> None:
         with self.cond:
             self.version += 1
+            cur_ids = {f["id"] for f in envelope["findings"]}
+            delta_new = len(cur_ids - self.prev_ids)
+            delta_gone = len(self.prev_ids - cur_ids)
+            self.prev_ids = cur_ids
+            self.activity.appendleft({
+                "at": datetime.datetime.now().strftime("%H:%M:%S"),
+                "files": envelope["summary"]["files_scanned"],
+                "total": len(cur_ids),
+                "new": delta_new,
+                "gone": delta_gone,
+            })
+            envelope["activity"] = list(self.activity)
+            envelope["analyzer_counts"] = _counts_by_analyzer(envelope["findings"])
             self.envelope = envelope
             self.cond.notify_all()
 
@@ -55,15 +103,26 @@ class _State:
 _state = _State()
 
 
-def _scan(repo: Path) -> dict:
-    """Run analyzers + annotate each finding with `baselined` bool.
+def _counts_by_analyzer(findings: list[dict]) -> list[dict]:
+    """Sorted analyzer counts split by severity, for the bar chart."""
+    by = {}
+    for f in findings:
+        by.setdefault(f["analyzer_id"], {"block": 0, "warn": 0, "info": 0})
+        by[f["analyzer_id"]][f["severity"]] += 1
+    out = [{"id": k, **v, "total": v["block"] + v["warn"] + v["info"]}
+           for k, v in by.items()]
+    out.sort(key=lambda x: (-x["total"], x["id"]))
+    return out
 
-    Baseline is re-read on every scan so the UI reacts if the user runs
-    `cockpit baseline save` in another terminal."""
+
+def _scan(repo: Path) -> dict:
+    """Run analyzers + annotate each finding with `baselined` bool and
+    a `rationale` string. Baseline is re-read on every scan."""
     env = _run_once(repo)
     baselined = bl.load(repo) or set()
     for f in env["findings"]:
         f["baselined"] = f["id"] in baselined
+        f["rationale"] = _RATIONALES.get(f["analyzer_id"], "")
     env["summary"]["baselined"] = sum(1 for f in env["findings"] if f["baselined"])
     env["summary"]["new"] = len(env["findings"]) - env["summary"]["baselined"]
     return env
@@ -139,25 +198,27 @@ _PAGE = """<!doctype html>
 <style>
 :root {
   color-scheme: light dark;
-  --bg: #fdfdfd; --fg: #1a1a1a; --muted: #666;
+  --bg: #fdfdfd; --panel: #ffffff; --fg: #1a1a1a; --muted: #666;
   --border: #ddd; --stripe: #f6f6f6; --code-bg: #f0f0f0;
   --block: #c62828; --warn: #d97706; --info: #0369a1;
   --live: #16a34a;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1a1a1a; --fg: #eee; --muted: #999;
-    --border: #333; --stripe: #222; --code-bg: #2a2a2a;
+    --bg: #141414; --panel: #1c1c1c; --fg: #eee; --muted: #999;
+    --border: #333; --stripe: #242424; --code-bg: #262626;
     --block: #ef5350; --warn: #fbbf24; --info: #38bdf8;
     --live: #4ade80;
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; padding: 1rem 1.25rem;
+html, body { height: 100%; }
+body { margin: 0; padding: 0.75rem 1rem;
   font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-  background: var(--bg); color: var(--fg); }
+  background: var(--bg); color: var(--fg);
+  display: grid; grid-template-rows: auto auto 1fr; gap: 0.5rem; }
 header { display: flex; gap: 1.25rem; align-items: baseline; flex-wrap: wrap;
-  padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); margin-bottom: 0.75rem; }
+  padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
 h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
 .repo { color: var(--muted); font-family: ui-monospace, monospace; font-size: 0.85rem; }
 .summary { display: flex; gap: 0.5rem; }
@@ -176,16 +237,34 @@ h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
   70% { box-shadow: 0 0 0 8px transparent; opacity: 0.9; }
   100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
 }
-.filters { display: flex; gap: 0.75rem; margin: 0.75rem 0; align-items: center; flex-wrap: wrap; }
+.filters { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
 .filters label { display: flex; gap: 0.25rem; align-items: center; user-select: none; cursor: pointer; }
 .filters input[type=text] { padding: 0.25rem 0.5rem; border: 1px solid var(--border);
   background: var(--bg); color: var(--fg); border-radius: 3px; min-width: 20ch; }
 .count { color: var(--muted); font-size: 0.85rem; margin-left: auto; }
+
+main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-rows: minmax(0, 1fr) 180px; gap: 0.5rem; min-height: 0; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.panel > h2 { margin: 0; padding: 0.4rem 0.75rem;
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); border-bottom: 1px solid var(--border); display: flex; gap: 0.5rem; align-items: center; }
+.panel > h2 .killer { color: var(--warn); }
+.panel-body { flex: 1; overflow: auto; min-height: 0; }
+
+.risk { grid-column: 1; grid-row: 1; }
+.evidence { grid-column: 2; grid-row: 1 / span 2; }
+.delta { grid-column: 1; grid-row: 2; }
+.evidence-empty { padding: 1.5rem; color: var(--muted); font-size: 0.85rem; text-align: center; }
+
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; font-size: 0.75rem; color: var(--muted); }
 tr:nth-child(even) { background: var(--stripe); }
 tr.finding.fresh { animation: flash 1.2s ease-out; }
-tr.finding.selected { outline: 2px solid var(--live); outline-offset: -2px; }
+tr.finding.selected { outline: 2px solid var(--live); outline-offset: -2px; background: color-mix(in srgb, var(--live) 8%, transparent); }
+tr.finding.baselined { opacity: 0.55; }
 tr.finding.baselined td.loc::after { content: " · baseline"; color: var(--muted); font-size: 0.75rem; }
 @keyframes flash {
   0% { background: color-mix(in srgb, var(--live) 30%, var(--bg)); }
@@ -223,10 +302,40 @@ tr.evidence pre { margin: 0; white-space: pre-wrap; word-break: break-word;
   font-family: ui-monospace, monospace; font-size: 0.8rem; color: var(--fg); }
 tr.finding { cursor: pointer; }
 tr.finding:hover { background: var(--stripe); }
-.chev::before { content: "▸"; display: inline-block; width: 1em; color: var(--muted);
-  font-size: 0.7rem; transition: transform 0.1s; }
-tr.finding.expanded .chev::before { transform: rotate(90deg); }
 .empty { padding: 2rem; text-align: center; color: var(--muted); }
+
+/* EVIDENCE panel */
+.ev { padding: 0.75rem 1rem; }
+.ev .loc { font-family: ui-monospace, monospace; font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--fg); }
+.ev .rule { color: var(--muted); font-size: 0.8rem; margin-bottom: 0.5rem; }
+.ev .msg { font-size: 0.95rem; margin-bottom: 0.75rem; }
+.ev section { margin-top: 0.75rem; }
+.ev section > h3 { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.35rem; }
+.ev pre { background: var(--code-bg); padding: 0.6rem 0.75rem; border-radius: 3px;
+  font-family: ui-monospace, monospace; font-size: 0.78rem; overflow: auto;
+  white-space: pre-wrap; word-break: break-word; margin: 0; }
+.ev .matches { display: flex; flex-direction: column; gap: 0.25rem; font-family: ui-monospace, monospace; font-size: 0.8rem; }
+.ev .matches a { color: var(--fg); text-decoration: none; padding: 0.15rem 0.35rem; border-radius: 2px; }
+.ev .matches a:hover { background: var(--stripe); }
+
+/* DELTA (analyzer bar chart) */
+.chart-row { display: grid; grid-template-columns: 12em 1fr 3em; gap: 0.5rem;
+  align-items: center; padding: 0.15rem 0.75rem; font-size: 0.8rem; }
+.chart-row .name { font-family: ui-monospace, monospace; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart-row .bar { height: 0.55rem; background: var(--stripe); border-radius: 2px; overflow: hidden;
+  display: flex; }
+.chart-row .bar span { display: block; height: 100%; }
+.chart-row .bar .block { background: var(--block); }
+.chart-row .bar .warn { background: var(--warn); }
+.chart-row .bar .info { background: var(--info); }
+.chart-row .n { font-family: ui-monospace, monospace; text-align: right; color: var(--muted); }
+.chart-empty { padding: 1rem; color: var(--muted); font-size: 0.85rem; text-align: center; }
+
+/* NOW activity log (embedded in DELTA panel footer strip) */
+.activity { display: flex; flex-direction: column; gap: 0.1rem; padding: 0.35rem 0.75rem; font-family: ui-monospace, monospace; font-size: 0.78rem; }
+.activity .row { display: grid; grid-template-columns: 4.5em 1fr auto; gap: 0.5rem; color: var(--muted); }
+.activity .row .delta.pos { color: var(--warn); }
+.activity .row .delta.neg { color: var(--live); }
 </style>
 
 <header>
@@ -265,19 +374,40 @@ tr.finding.expanded .chev::before { transform: rotate(90deg); }
   </div>
 </div>
 
-<table>
-  <thead>
-    <tr>
-      <th style="width:1.5em"></th>
-      <th style="width:5em">sev</th>
-      <th>file:line</th>
-      <th style="width:12em">analyzer</th>
-      <th>message</th>
-    </tr>
-  </thead>
-  <tbody id="rows"></tbody>
-</table>
-<div id="empty" class="empty" hidden>No findings match the current filters.</div>
+<main>
+  <section class="panel risk">
+    <h2>Risk <span class="killer">★</span> <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">findings · j / k to navigate</span></h2>
+    <div class="panel-body">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:5em">sev</th>
+            <th>file:line</th>
+            <th style="width:11em">analyzer</th>
+            <th>message</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="empty" class="empty" hidden>No findings match the current filters.</div>
+    </div>
+  </section>
+
+  <section class="panel evidence">
+    <h2>Evidence</h2>
+    <div class="panel-body" id="evidence-body">
+      <div class="evidence-empty">Select a finding — press <kbd>j</kbd> or click a row.</div>
+    </div>
+  </section>
+
+  <section class="panel delta">
+    <h2>Delta · analyzer counts <span style="margin-left:auto;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">& recent scans</span></h2>
+    <div class="panel-body" style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
+      <div id="chart" style="border-right:1px solid var(--border);overflow:auto;"></div>
+      <div id="activity" class="activity"></div>
+    </div>
+  </section>
+</main>
 
 <script>
 const SEV_ORDER = { block: 0, warn: 1, info: 2 };
@@ -321,24 +451,80 @@ function render(envelope, freshIds) {
       + (f.baselined ? " baselined" : "");
     tr.dataset.i = i;
     tr.innerHTML = `
-      <td><span class="chev"></span></td>
       <td><span class="sev ${f.severity}">${f.severity}</span></td>
       <td class="loc">${esc(f.file)}:${f.span[0]}${f.symbol ? " · " + esc(f.symbol) : ""}</td>
       <td class="ana">${esc(f.analyzer_id)}<br><span style="opacity:0.6">v${esc(f.analyzer_version)}</span></td>
       <td>${esc(f.message)}</td>`;
     rowsEl.appendChild(tr);
-
-    const ev = document.createElement("tr");
-    ev.className = "evidence";
-    const td = document.createElement("td");
-    td.colSpan = 5;
-    td.innerHTML = `<pre>${esc(JSON.stringify(f.evidence, null, 2))}</pre>`;
-    ev.appendChild(td);
-    rowsEl.appendChild(ev);
-
-    tr.addEventListener("click", () => tr.classList.toggle("expanded"));
+    tr.addEventListener("click", () => select(i));
   });
+  renderChart(envelope.analyzer_counts || []);
+  renderActivity(envelope.activity || []);
   applyFilter();
+  if (selectedIdx >= 0 && selectedIdx < findings.length) {
+    renderEvidence(findings[selectedIdx]);
+  } else {
+    renderEvidence(null);
+  }
+}
+
+function renderEvidence(f) {
+  const body = document.getElementById("evidence-body");
+  if (!f) {
+    body.innerHTML = '<div class="evidence-empty">Select a finding — press <kbd>j</kbd> or click a row.</div>';
+    return;
+  }
+  const evJson = JSON.stringify(f.evidence, null, 2);
+  const snippet = (f.evidence && (f.evidence.snippet || f.evidence.text)) || evJson;
+  const matches = (f.evidence && Array.isArray(f.evidence.matches)) ? f.evidence.matches : [];
+  const matchesHtml = matches.length
+    ? `<section><h3>Matches (${matches.length})</h3><div class="matches">`
+        + matches.map(m => `<a>${esc(m.file || "")}:${m.span ? m.span[0] : ""}</a>`).join("")
+        + `</div></section>`
+    : "";
+  body.innerHTML = `<div class="ev">
+    <div class="loc"><span class="sev ${f.severity}">${f.severity}</span> ${esc(f.file)}:${f.span[0]}${f.symbol ? " · " + esc(f.symbol) : ""}${f.baselined ? ' <span style="color:var(--muted);font-size:0.75rem;">· baseline</span>' : ""}</div>
+    <div class="rule">${esc(f.analyzer_id)} v${esc(f.analyzer_version)}</div>
+    <div class="msg">${esc(f.message)}</div>
+    ${f.rationale ? `<section><h3>How this was detected</h3><div style="color:var(--muted);font-size:0.83rem;">${esc(f.rationale)}</div></section>` : ""}
+    <section><h3>Snippet</h3><pre>${esc(snippet)}</pre></section>
+    ${matchesHtml}
+    <section><h3>Raw evidence</h3><pre>${esc(evJson)}</pre></section>
+  </div>`;
+}
+
+function renderChart(rows) {
+  const el = document.getElementById("chart");
+  if (!rows.length) { el.innerHTML = '<div class="chart-empty">no findings</div>'; return; }
+  const max = Math.max(...rows.map(r => r.total));
+  el.innerHTML = rows.map(r => {
+    const pct = s => `${(r[s] / max * 100).toFixed(1)}%`;
+    return `<div class="chart-row">
+      <span class="name" title="${esc(r.id)}">${esc(r.id)}</span>
+      <span class="bar">
+        ${r.block ? `<span class="block" style="width:${pct('block')}"></span>` : ""}
+        ${r.warn  ? `<span class="warn"  style="width:${pct('warn')}"></span>`  : ""}
+        ${r.info  ? `<span class="info"  style="width:${pct('info')}"></span>`  : ""}
+      </span>
+      <span class="n">${r.total}</span>
+    </div>`;
+  }).join("");
+}
+
+function renderActivity(rows) {
+  const el = document.getElementById("activity");
+  if (!rows.length) { el.innerHTML = '<div class="chart-empty">waiting…</div>'; return; }
+  el.innerHTML = rows.map(a => {
+    const parts = [];
+    if (a.new) parts.push(`<span class="delta pos">+${a.new}</span>`);
+    if (a.gone) parts.push(`<span class="delta neg">−${a.gone}</span>`);
+    const delta = parts.length ? parts.join(" ") : `<span style="opacity:0.5">·</span>`;
+    return `<div class="row">
+      <span>${esc(a.at)}</span>
+      <span>${a.total} findings · ${a.files} files</span>
+      <span>${delta}</span>
+    </div>`;
+  }).join("");
 }
 
 function applyFilter() {
@@ -358,13 +544,10 @@ function applyFilter() {
     const qOk = !q || tr.textContent.toLowerCase().includes(q);
     const visible = sevOk && bOk && qOk;
     tr.classList.toggle("hidden", !visible);
-    tr.nextElementSibling.classList.toggle("hidden", !visible);
-    if (!visible) tr.classList.remove("expanded");
     if (visible) shown++;
   });
   document.getElementById("count").textContent = `${shown} of ${findings.length}`;
   document.getElementById("empty").hidden = shown > 0;
-  // Clamp selection to a visible row.
   if (selectedIdx >= 0) {
     const cur = document.querySelector(`tr.finding[data-i="${selectedIdx}"]`);
     if (!cur || cur.classList.contains("hidden")) select(nextVisible(-1, +1));
@@ -385,12 +568,13 @@ function nextVisible(from, dir) {
 function select(i) {
   document.querySelectorAll("tr.finding.selected").forEach(r => r.classList.remove("selected"));
   selectedIdx = i;
-  if (i < 0) return;
+  if (i < 0 || i >= findings.length) { renderEvidence(null); return; }
   const tr = document.querySelector(`tr.finding[data-i="${i}"]`);
   if (tr) {
     tr.classList.add("selected");
     tr.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
+  renderEvidence(findings[i]);
 }
 
 function setBaselineMode(mode) {
@@ -420,10 +604,8 @@ document.addEventListener("keydown", e => {
     case "j": select(nextVisible(selectedIdx, +1)); e.preventDefault(); break;
     case "k": select(nextVisible(selectedIdx, -1)); e.preventDefault(); break;
     case "Enter": case " ": {
-      if (selectedIdx < 0) return;
-      const tr = document.querySelector(`tr.finding[data-i="${selectedIdx}"]`);
-      if (tr) tr.classList.toggle("expanded");
-      e.preventDefault();
+      // Nav-to-first if nothing selected; otherwise re-focus the evidence pane's snippet.
+      if (selectedIdx < 0) { select(nextVisible(-1, +1)); e.preventDefault(); }
       break;
     }
     case "1": document.getElementById("f-block").click(); break;
