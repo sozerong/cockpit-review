@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **`test.time.sleep` v1** — flags `time.sleep(...)` and `sleep(...)`
+  (when `from time import sleep`) inside `test_*` functions in test files.
+  Flaky-test signal, `warn`. Real-repo pilot on pytest surfaced 4 hits, all
+  in atime-sensitive tests.
+- **UI: auto-pick baseline mode** — first envelope with no baseline (fresh
+  repo) starts in `all` view instead of empty `new only`. Once set, the
+  user can switch as normal.
+- **CLI: JSON output ASCII-safe** — `cockpit check --json` uses
+  `ensure_ascii=True` so a stray non-ASCII byte in evidence can never
+  crash stdout on legacy Windows consoles (cp949/cp1252).
+- **`cockpit serve --host`** — bind address flag for Tailscale/LAN access.
+  Default `127.0.0.1` unchanged.
+- **`cockpit serve`** — live dashboard. Watch loop pushes to in-memory state
+  with a monotonic version; browser long-polls, re-renders on change. Newly
+  appeared findings flash. Stdlib only (http.server + threading + urllib).
+- **UI: baseline-diff view** — three-way segment control (new only / all /
+  baselined) on the live dashboard; each finding tagged `baselined: true|false`
+  in the state payload. Default view hides baselined noise, matching the CI
+  gate philosophy.
+- **UI: keyboard shortcuts** — j/k navigate, Enter expand, 1/2/3 toggle
+  severity, n cycle baseline mode, / focus search, Esc blur / close, ? help
+  overlay.
+- **`arg.mutable-default` v1** — flags `def f(x=[])`, `x={}`, `x=set()`,
+  `x=list()`, `x=dict()`. Deterministic single AST shape, `warn`.
+- **`except.reraise-vs-raise` v1** — flags `except X as e: ... raise e`
+  where the identifier raised is the `as` alias. Bare `raise` re-raises
+  with the original traceback intact; `raise e` truncates it. Deterministic
+  single AST shape, `warn`.
 - **`cockpit report [--out FILE]`** — single-file HTML report of the current
   findings envelope. Severity filter (block/warn/info), full-text search
   across file/analyzer/symbol, click-to-expand evidence. No CDN, no build

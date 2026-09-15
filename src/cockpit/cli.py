@@ -55,7 +55,9 @@ def cmd_check(repo: Path, as_json: bool, use_color: bool,
     )
 
     if as_json:
-        json.dump(envelope, sys.stdout, ensure_ascii=False, indent=2)
+        # ensure_ascii=True so a legacy console encoding (Windows cp949/cp1252)
+        # can never break JSON output on a stray non-ASCII byte in evidence.
+        json.dump(envelope, sys.stdout, ensure_ascii=True, indent=2)
         sys.stdout.write("\n")
     else:
         if baselined is not None:
@@ -124,6 +126,12 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--out", type=Path,
                    help="Output path (default: <repo>/cockpit-report.html)")
 
+    s = sub.add_parser("serve", help="Live dashboard — auto-updates on file change")
+    s.add_argument("repo", nargs="?", default=".", type=Path)
+    s.add_argument("--port", type=int, default=8765)
+    s.add_argument("--host", default="127.0.0.1",
+                   help="Bind address. Use 0.0.0.0 to expose to LAN/Tailscale (default: 127.0.0.1)")
+
     args = p.parse_args(argv)
     if args.cmd == "check":
         use_color = sys.stdout.isatty() and not args.no_color
@@ -137,6 +145,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "report":
         from .ui import cmd_report
         return cmd_report(args.repo, args.out)
+    if args.cmd == "serve":
+        from .serve import cmd_serve
+        return cmd_serve(args.repo, port=args.port, host=args.host)
     return 2
 
 

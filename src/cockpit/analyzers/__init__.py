@@ -12,6 +12,9 @@ from .dup_block import DupBlock
 from .assertion_free import AssertionFree
 from .always_true_assertion import AlwaysTrueAssertion
 from .no_test_for_public import NoTestForPublic
+from .reraise_vs_raise import ReraiseVsRaise
+from .arg_mutable_default import ArgMutableDefault
+from .test_time_sleep import TestTimeSleep
 # mocks_target: disabled — BRIEF §13.5 precision <0.7 stop criterion tripped
 # (v1 pilot: 0-5% on 20 findings; needs SUT-detection v2, deferred).
 # from .mocks_target import MocksTarget
@@ -30,6 +33,9 @@ ANALYZERS: list[Analyzer] = [
     AssertionFree(),
     AlwaysTrueAssertion(),
     NoTestForPublic(),
+    ReraiseVsRaise(),
+    ArgMutableDefault(),
+    TestTimeSleep(),
 ]
 
 
