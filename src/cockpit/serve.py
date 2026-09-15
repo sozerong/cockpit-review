@@ -32,32 +32,140 @@ ACTIVITY_LEN = 12       # rolling scan-event log for the NOW panel
 # analyzer roster so a new analyzer added to __init__.py without a
 # rationale here still renders (falls back to the analyzer id).
 _RATIONALES = {
-    "dup.block":
-        "5+ line duplicate windows inside function bodies. "
-        "String-dominant blocks filtered; tests/examples/docs downgraded; "
-        "clusters of >5 copies collapse to one info.",
-    "risk.error-masking":
-        "except body is only pass/…, split by broadness: "
-        "bare `except:` or `except Exception:` → warn; "
-        "`except SpecificError:` → info.",
-    "except.reraise-vs-raise":
-        "`raise <alias>` in `except X as <alias>:` truncates traceback. "
-        "Bare `raise` preserves it.",
-    "arg.mutable-default":
-        "Default is evaluated once at def-time. `def f(x=[]):` shares "
-        "one list across every call — classic hidden state.",
-    "test.assertion-free":
-        "test_* function with no assert*, pytest.raises, or unittest self.assert*. "
-        "Runs, passes, checks nothing.",
-    "test.always-true-assertion":
-        "assert on a truthy literal (True, non-empty container, non-zero number). "
-        "Always passes regardless of code.",
-    "test.no-test-for-public-symbol":
-        "Public top-level symbol has no test_<name> anywhere in the parallel "
-        "tests/ tree.",
-    "test.time.sleep":
-        "`time.sleep(...)` inside a test_* function. Waiting on wall time in "
-        "tests is a flakiness antipattern; use event-driven waits.",
+    "en": {
+        "dup.block":
+            "5+ line duplicate windows inside function bodies. "
+            "String-dominant blocks filtered; tests/examples/docs downgraded; "
+            "clusters of >5 copies collapse to one info.",
+        "risk.error-masking":
+            "except body is only pass/…, split by broadness: "
+            "bare `except:` or `except Exception:` → warn; "
+            "`except SpecificError:` → info.",
+        "except.reraise-vs-raise":
+            "`raise <alias>` in `except X as <alias>:` truncates traceback. "
+            "Bare `raise` preserves it.",
+        "arg.mutable-default":
+            "Default is evaluated once at def-time. `def f(x=[]):` shares "
+            "one list across every call — classic hidden state.",
+        "test.assertion-free":
+            "test_* function with no assert*, pytest.raises, or unittest self.assert*. "
+            "Runs, passes, checks nothing.",
+        "test.always-true-assertion":
+            "assert on a truthy literal (True, non-empty container, non-zero number). "
+            "Always passes regardless of code.",
+        "test.no-test-for-public-symbol":
+            "Public top-level symbol has no test_<name> anywhere in the parallel "
+            "tests/ tree.",
+        "test.time.sleep":
+            "`time.sleep(...)` inside a test_* function. Waiting on wall time in "
+            "tests is a flakiness antipattern; use event-driven waits.",
+    },
+    "ko": {
+        "dup.block":
+            "함수 본문 안에서 5행 이상 중복되는 코드 블록. "
+            "문자열 위주 블록은 걸러내고, tests/examples/docs는 등급 강등, "
+            "5개 초과 클러스터는 info 하나로 축약.",
+        "risk.error-masking":
+            "except 본문이 pass/… 뿐인 경우. 예외 광범위성으로 분류: "
+            "bare `except:` 또는 `except Exception:` → warn, "
+            "`except 특정예외:` → info.",
+        "except.reraise-vs-raise":
+            "`except X as e:` 다음 `raise e`는 원래 traceback을 잘라냄. "
+            "그냥 `raise`만 쓰면 traceback이 보존됨.",
+        "arg.mutable-default":
+            "기본값은 def 선언 시점에 1회 평가됨. `def f(x=[]):`는 "
+            "모든 호출이 하나의 리스트를 공유 — 대표적인 숨은 상태 버그.",
+        "test.assertion-free":
+            "test_* 함수인데 assert*, pytest.raises, self.assert* 어느 것도 없음. "
+            "실행되고 통과하지만 아무것도 검증 안 함.",
+        "test.always-true-assertion":
+            "항상 참인 리터럴에 대한 assert (True, 비어있지 않은 컨테이너, 0이 아닌 숫자). "
+            "코드와 무관하게 항상 통과함.",
+        "test.no-test-for-public-symbol":
+            "public 최상위 심볼이지만 tests/ 트리에 대응하는 test_<name>이 없음.",
+        "test.time.sleep":
+            "test_* 함수 안의 `time.sleep(...)`. 테스트에서 실시간 대기는 "
+            "flaky 신호 — 이벤트 기반 대기(async, fixture)로 바꿔야 함.",
+    },
+}
+
+
+# UI strings for the dashboard. Any key missing in "ko" falls back to "en".
+_STRINGS = {
+    "en": {
+        "connecting": "connecting…",
+        "live": "live", "scanning": "scanning…", "disconnected": "disconnected",
+        "block": "block", "warn": "warn", "info": "info",
+        "files": "files",
+        "mode_new": "new only", "mode_all": "all", "mode_baselined": "baselined",
+        "mode_new_title": "hide baselined findings (press N)",
+        "mode_all_title": "show every finding",
+        "mode_baselined_title": "show only baselined findings",
+        "search": "filter by file, analyzer, symbol…  /",
+        "help_btn": "show keyboard shortcuts",
+        "of": "of",
+        "risk_title": "Risk", "risk_hint": "findings · j / k to navigate",
+        "evidence_title": "Evidence",
+        "evidence_empty_html":
+            "Select a finding — press <kbd>j</kbd> or click a row.",
+        "delta_title": "Delta · analyzer counts",
+        "delta_hint": "& recent scans",
+        "no_findings_match": "No findings match the current filters.",
+        "no_findings": "no findings",
+        "waiting": "waiting…",
+        "how_detected": "How this was detected",
+        "snippet": "Snippet",
+        "matches": "Matches",
+        "raw_evidence": "Raw evidence",
+        "baseline_tag": "baseline",
+        "help_h": "keyboard",
+        "help_jk": "next / previous finding",
+        "help_enter": "expand selected finding",
+        "help_123": "toggle block / warn / info",
+        "help_n": "cycle: new only → all → baselined",
+        "help_slash": "focus search",
+        "help_esc": "blur search / close this",
+        "help_q": "toggle this overlay",
+        "activity_findings": "findings",
+        "activity_files": "files",
+    },
+    "ko": {
+        "connecting": "연결 중…",
+        "live": "실시간", "scanning": "스캔 중…", "disconnected": "연결 끊김",
+        "block": "block", "warn": "warn", "info": "info",
+        "files": "파일",
+        "mode_new": "신규만", "mode_all": "전체", "mode_baselined": "baseline",
+        "mode_new_title": "baseline에 있는 것 숨김 (N 키)",
+        "mode_all_title": "모든 finding 표시",
+        "mode_baselined_title": "baseline에 있는 것만 표시",
+        "search": "파일 / analyzer / symbol 검색…  /",
+        "help_btn": "키보드 단축키",
+        "of": "/",
+        "risk_title": "위험도", "risk_hint": "findings · j / k 로 이동",
+        "evidence_title": "근거",
+        "evidence_empty_html":
+            "finding을 선택하세요 — <kbd>j</kbd> 키 또는 행 클릭.",
+        "delta_title": "델타 · analyzer 별 개수",
+        "delta_hint": "· 최근 스캔",
+        "no_findings_match": "현재 필터에 해당하는 finding이 없습니다.",
+        "no_findings": "finding 없음",
+        "waiting": "대기 중…",
+        "how_detected": "탐지 근거",
+        "snippet": "코드",
+        "matches": "매치",
+        "raw_evidence": "원본 evidence",
+        "baseline_tag": "baseline",
+        "help_h": "키보드",
+        "help_jk": "다음 / 이전 finding",
+        "help_enter": "선택된 finding 펼치기",
+        "help_123": "block / warn / info 토글",
+        "help_n": "사이클: 신규만 → 전체 → baseline",
+        "help_slash": "검색 포커스",
+        "help_esc": "검색 blur / 닫기",
+        "help_q": "이 오버레이 토글",
+        "activity_findings": "findings",
+        "activity_files": "파일",
+    },
 }
 
 
@@ -127,7 +235,9 @@ def _scan(repo: Path) -> dict:
     baselined = baselined or set()
     for f in env["findings"]:
         f["baselined"] = f["id"] in baselined
-        f["rationale"] = _RATIONALES.get(f["analyzer_id"], "")
+        aid = f["analyzer_id"]
+        f["rationale"] = _RATIONALES["en"].get(aid, "")
+        f["rationale_ko"] = _RATIONALES["ko"].get(aid, "")
     env["summary"]["baselined"] = sum(1 for f in env["findings"] if f["baselined"])
     env["summary"]["new"] = len(env["findings"]) - env["summary"]["baselined"]
     return env
@@ -161,7 +271,11 @@ class _Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         url = urlparse(self.path)
         if url.path == "/":
-            self._send(200, "text/html; charset=utf-8", _PAGE.encode("utf-8"))
+            strings_json = json.dumps(_STRINGS, ensure_ascii=False)
+            # Belt-and-suspenders against payload closing the injecting script tag.
+            strings_json = strings_json.replace("</", "<\\/")
+            page = _PAGE.replace("__STRINGS_JSON__", strings_json)
+            self._send(200, "text/html; charset=utf-8", page.encode("utf-8"))
         elif url.path == "/state.json":
             since = int((parse_qs(url.query).get("since") or ["-1"])[0])
             version, envelope, scanning = _state.wait_after(since, WAIT_TIMEOUT)
@@ -348,43 +462,47 @@ tr.finding:hover { background: var(--stripe); }
 
 <header>
   <h1>cockpit</h1>
-  <span class="repo" id="repo">connecting…</span>
+  <span class="repo" id="repo" data-t="connecting">connecting…</span>
   <div class="summary" id="summary"></div>
-  <span class="live"><span class="dot" id="dot"></span><span id="livetext">live</span></span>
+  <span class="live"><span class="dot" id="dot"></span><span id="livetext" data-t="live">live</span></span>
+  <span class="seg" id="lang-mode" role="group" aria-label="language" style="margin-left:auto;">
+    <button data-lang="en">EN</button>
+    <button data-lang="ko">KO</button>
+  </span>
 </header>
 
 <div class="filters">
-  <label><input type="checkbox" id="f-block" checked> block <kbd>1</kbd></label>
-  <label><input type="checkbox" id="f-warn" checked> warn <kbd>2</kbd></label>
-  <label><input type="checkbox" id="f-info"> info <kbd>3</kbd></label>
+  <label><input type="checkbox" id="f-block" checked> <span data-t="block">block</span> <kbd>1</kbd></label>
+  <label><input type="checkbox" id="f-warn" checked> <span data-t="warn">warn</span> <kbd>2</kbd></label>
+  <label><input type="checkbox" id="f-info"> <span data-t="info">info</span> <kbd>3</kbd></label>
   <span class="seg" id="baseline-mode" role="group" aria-label="baseline filter">
-    <button data-mode="new" class="active" title="hide baselined findings (press N)">new only</button>
-    <button data-mode="all" title="show every finding">all</button>
-    <button data-mode="baselined" title="show only baselined findings">baselined</button>
+    <button data-mode="new" class="active" data-t="mode_new" data-t-title="mode_new_title">new only</button>
+    <button data-mode="all" data-t="mode_all" data-t-title="mode_all_title">all</button>
+    <button data-mode="baselined" data-t="mode_baselined" data-t-title="mode_baselined_title">baselined</button>
   </span>
-  <input type="text" id="q" placeholder="filter by file, analyzer, symbol…  /">
+  <input type="text" id="q" data-t-placeholder="search" placeholder="filter by file, analyzer, symbol…  /">
   <span class="count" id="count"></span>
-  <button id="help-btn" title="show keyboard shortcuts" style="border:1px solid var(--border);background:var(--bg);color:var(--muted);border-radius:3px;padding:0.15rem 0.5rem;cursor:pointer;font:inherit;font-size:0.85rem;">?</button>
+  <button id="help-btn" data-t-title="help_btn" style="border:1px solid var(--border);background:var(--bg);color:var(--muted);border-radius:3px;padding:0.15rem 0.5rem;cursor:pointer;font:inherit;font-size:0.85rem;">?</button>
 </div>
 
 <div class="help-overlay" id="help" hidden>
   <div class="help-card">
-    <h2>keyboard</h2>
+    <h2 data-t="help_h">keyboard</h2>
     <table>
-      <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>next / previous finding</td></tr>
-      <tr><td><kbd>Enter</kbd></td><td>expand selected finding</td></tr>
-      <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>toggle block / warn / info</td></tr>
-      <tr><td><kbd>n</kbd></td><td>cycle: new only → all → baselined</td></tr>
-      <tr><td><kbd>/</kbd></td><td>focus search</td></tr>
-      <tr><td><kbd>Esc</kbd></td><td>blur search / close this</td></tr>
-      <tr><td><kbd>?</kbd></td><td>toggle this overlay</td></tr>
+      <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td data-t="help_jk">next / previous finding</td></tr>
+      <tr><td><kbd>Enter</kbd></td><td data-t="help_enter">expand selected finding</td></tr>
+      <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td data-t="help_123">toggle block / warn / info</td></tr>
+      <tr><td><kbd>n</kbd></td><td data-t="help_n">cycle: new only → all → baselined</td></tr>
+      <tr><td><kbd>/</kbd></td><td data-t="help_slash">focus search</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td data-t="help_esc">blur search / close this</td></tr>
+      <tr><td><kbd>?</kbd></td><td data-t="help_q">toggle this overlay</td></tr>
     </table>
   </div>
 </div>
 
 <main>
   <section class="panel risk">
-    <h2>Risk <span class="killer">★</span> <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">findings · j / k to navigate</span></h2>
+    <h2><span data-t="risk_title">Risk</span> <span class="killer">★</span> <span data-t="risk_hint" style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">findings · j / k to navigate</span></h2>
     <div class="panel-body">
       <table>
         <thead>
@@ -397,19 +515,17 @@ tr.finding:hover { background: var(--stripe); }
         </thead>
         <tbody id="rows"></tbody>
       </table>
-      <div id="empty" class="empty" hidden>No findings match the current filters.</div>
+      <div id="empty" class="empty" hidden data-t="no_findings_match">No findings match the current filters.</div>
     </div>
   </section>
 
   <section class="panel evidence">
-    <h2>Evidence</h2>
-    <div class="panel-body" id="evidence-body">
-      <div class="evidence-empty">Select a finding — press <kbd>j</kbd> or click a row.</div>
-    </div>
+    <h2 data-t="evidence_title">Evidence</h2>
+    <div class="panel-body" id="evidence-body"></div>
   </section>
 
   <section class="panel delta">
-    <h2>Delta · analyzer counts <span style="margin-left:auto;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">& recent scans</span></h2>
+    <h2><span data-t="delta_title">Delta · analyzer counts</span> <span data-t="delta_hint" style="margin-left:auto;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">& recent scans</span></h2>
     <div class="panel-body" style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
       <div id="chart" style="border-right:1px solid var(--border);overflow:auto;"></div>
       <div id="activity" class="activity"></div>
@@ -420,38 +536,65 @@ tr.finding:hover { background: var(--stripe); }
 <script>
 const SEV_ORDER = { block: 0, warn: 1, info: 2 };
 const BASELINE_MODES = ["new", "all", "baselined"];
+const STRINGS = __STRINGS_JSON__;
 let version = -1;
 let findings = [];
 let prevIds = new Set();
 let baselineMode = "new";
 let selectedIdx = -1;
 let modeAutoPicked = false;  // first envelope sets initial mode based on has_baseline
+let lang = "en";
+
+function t(key) {
+  return (STRINGS[lang] && STRINGS[lang][key]) || STRINGS.en[key] || key;
+}
+
+function applyLang(next) {
+  lang = STRINGS[next] ? next : "en";
+  try { localStorage.setItem("cockpit.lang", lang); } catch {}
+  document.documentElement.lang = lang;
+  document.querySelectorAll("#lang-mode button").forEach(b =>
+    b.classList.toggle("active", b.dataset.lang === lang));
+  for (const el of document.querySelectorAll("[data-t]")) {
+    const v = t(el.dataset.t);
+    if (el.dataset.t.endsWith("_html")) el.innerHTML = v;
+    else el.textContent = v;
+  }
+  for (const el of document.querySelectorAll("[data-t-title]"))
+    el.title = t(el.dataset.tTitle);
+  for (const el of document.querySelectorAll("[data-t-placeholder]"))
+    el.placeholder = t(el.dataset.tPlaceholder);
+  // Dynamic re-renders that were built pre-switch.
+  if (findings.length) {
+    applyFilter();
+    if (selectedIdx >= 0 && selectedIdx < findings.length) renderEvidence(findings[selectedIdx]);
+    else renderEvidence(null);
+    // Refresh activity + summary counters (they read t() at render time).
+    const env = window.__lastEnvelope;
+    if (env) { renderActivity(env.activity || []); renderSummary(env.summary); }
+  }
+}
+
+document.querySelectorAll("#lang-mode button").forEach(btn =>
+  btn.addEventListener("click", () => applyLang(btn.dataset.lang)));
+
+try {
+  const stored = localStorage.getItem("cockpit.lang");
+  if (stored && STRINGS[stored]) lang = stored;
+  else if ((navigator.language || "").toLowerCase().startsWith("ko")) lang = "ko";
+} catch {}
+applyLang(lang);
 
 function esc(s) { return String(s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
 
 function render(envelope, freshIds) {
-  // First envelope only: if no baseline exists, "new only" would show
-  // an empty screen on repos this tool has never touched. Flip to "all"
-  // once, then let the user pick.
+  window.__lastEnvelope = envelope;
   if (!modeAutoPicked) {
     modeAutoPicked = true;
     if (envelope.has_baseline === false) setBaselineMode("all");
   }
   document.getElementById("repo").textContent = envelope.repo;
-  const s = envelope.summary;
-  const sumEl = document.getElementById("summary");
-  sumEl.innerHTML = "";
-  for (const sev of ["block", "warn", "info"]) {
-    const n = s[sev] || 0;
-    const span = document.createElement("span");
-    span.className = "n-" + (n === 0 ? "zero" : sev);
-    span.textContent = `${sev} ${n}`;
-    sumEl.appendChild(span);
-  }
-  const files = document.createElement("span");
-  files.className = "n-zero";
-  files.textContent = `· ${s.files_scanned} files`;
-  sumEl.appendChild(files);
+  renderSummary(envelope.summary);
 
   findings = [...envelope.findings].sort((a, b) =>
     (SEV_ORDER[a.severity] - SEV_ORDER[b.severity]) ||
@@ -484,34 +627,51 @@ function render(envelope, freshIds) {
   }
 }
 
+function renderSummary(s) {
+  const sumEl = document.getElementById("summary");
+  sumEl.innerHTML = "";
+  for (const sev of ["block", "warn", "info"]) {
+    const n = s[sev] || 0;
+    const span = document.createElement("span");
+    span.className = "n-" + (n === 0 ? "zero" : sev);
+    span.textContent = `${t(sev)} ${n}`;
+    sumEl.appendChild(span);
+  }
+  const files = document.createElement("span");
+  files.className = "n-zero";
+  files.textContent = `· ${s.files_scanned} ${t("files")}`;
+  sumEl.appendChild(files);
+}
+
 function renderEvidence(f) {
   const body = document.getElementById("evidence-body");
   if (!f) {
-    body.innerHTML = '<div class="evidence-empty">Select a finding — press <kbd>j</kbd> or click a row.</div>';
+    body.innerHTML = `<div class="evidence-empty">${t("evidence_empty_html")}</div>`;
     return;
   }
   const evJson = JSON.stringify(f.evidence, null, 2);
   const snippet = (f.evidence && (f.evidence.snippet || f.evidence.text)) || evJson;
   const matches = (f.evidence && Array.isArray(f.evidence.matches)) ? f.evidence.matches : [];
   const matchesHtml = matches.length
-    ? `<section><h3>Matches (${matches.length})</h3><div class="matches">`
+    ? `<section><h3>${t("matches")} (${matches.length})</h3><div class="matches">`
         + matches.map(m => `<a>${esc(m.file || "")}:${m.span ? m.span[0] : ""}</a>`).join("")
         + `</div></section>`
     : "";
+  const rationale = lang === "ko" && f.rationale_ko ? f.rationale_ko : f.rationale;
   body.innerHTML = `<div class="ev">
-    <div class="loc"><span class="sev ${f.severity}">${f.severity}</span> ${esc(f.file)}:${f.span[0]}${f.symbol ? " · " + esc(f.symbol) : ""}${f.baselined ? ' <span style="color:var(--muted);font-size:0.75rem;">· baseline</span>' : ""}</div>
+    <div class="loc"><span class="sev ${f.severity}">${t(f.severity)}</span> ${esc(f.file)}:${f.span[0]}${f.symbol ? " · " + esc(f.symbol) : ""}${f.baselined ? ` <span style="color:var(--muted);font-size:0.75rem;">· ${t("baseline_tag")}</span>` : ""}</div>
     <div class="rule">${esc(f.analyzer_id)} v${esc(f.analyzer_version)}</div>
     <div class="msg">${esc(f.message)}</div>
-    ${f.rationale ? `<section><h3>How this was detected</h3><div style="color:var(--muted);font-size:0.83rem;">${esc(f.rationale)}</div></section>` : ""}
-    <section><h3>Snippet</h3><pre>${esc(snippet)}</pre></section>
+    ${rationale ? `<section><h3>${t("how_detected")}</h3><div style="color:var(--muted);font-size:0.83rem;">${esc(rationale)}</div></section>` : ""}
+    <section><h3>${t("snippet")}</h3><pre>${esc(snippet)}</pre></section>
     ${matchesHtml}
-    <section><h3>Raw evidence</h3><pre>${esc(evJson)}</pre></section>
+    <section><h3>${t("raw_evidence")}</h3><pre>${esc(evJson)}</pre></section>
   </div>`;
 }
 
 function renderChart(rows) {
   const el = document.getElementById("chart");
-  if (!rows.length) { el.innerHTML = '<div class="chart-empty">no findings</div>'; return; }
+  if (!rows.length) { el.innerHTML = `<div class="chart-empty">${t("no_findings")}</div>`; return; }
   const max = Math.max(...rows.map(r => r.total));
   el.innerHTML = rows.map(r => {
     const pct = s => `${(r[s] / max * 100).toFixed(1)}%`;
@@ -529,7 +689,7 @@ function renderChart(rows) {
 
 function renderActivity(rows) {
   const el = document.getElementById("activity");
-  if (!rows.length) { el.innerHTML = '<div class="chart-empty">waiting…</div>'; return; }
+  if (!rows.length) { el.innerHTML = `<div class="chart-empty">${t("waiting")}</div>`; return; }
   el.innerHTML = rows.map(a => {
     const parts = [];
     if (a.new) parts.push(`<span class="delta pos">+${a.new}</span>`);
@@ -537,7 +697,7 @@ function renderActivity(rows) {
     const delta = parts.length ? parts.join(" ") : `<span style="opacity:0.5">·</span>`;
     return `<div class="row">
       <span>${esc(a.at)}</span>
-      <span>${a.total} findings · ${a.files} files</span>
+      <span>${a.total} ${t("activity_findings")} · ${a.files} ${t("activity_files")}</span>
       <span>${delta}</span>
     </div>`;
   }).join("");
@@ -562,7 +722,7 @@ function applyFilter() {
     tr.classList.toggle("hidden", !visible);
     if (visible) shown++;
   });
-  document.getElementById("count").textContent = `${shown} of ${findings.length}`;
+  document.getElementById("count").textContent = `${shown} ${t("of")} ${findings.length}`;
   document.getElementById("empty").hidden = shown > 0;
   if (selectedIdx >= 0) {
     const cur = document.querySelector(`tr.finding[data-i="${selectedIdx}"]`);
@@ -651,7 +811,7 @@ async function poll() {
       const { version: v, envelope, scanning } = await r.json();
       dot.classList.toggle("scanning", scanning);
       dot.classList.remove("stale");
-      label.textContent = scanning ? "scanning…" : "live";
+      label.textContent = scanning ? t("scanning") : t("live");
       if (envelope && v !== version) {
         version = v;
         const newIds = new Set(envelope.findings.map(f => f.id));
@@ -661,7 +821,7 @@ async function poll() {
       }
     } catch (e) {
       dot.classList.add("stale");
-      label.textContent = "disconnected";
+      label.textContent = t("disconnected");
       await new Promise(r => setTimeout(r, 2000));
     }
   }

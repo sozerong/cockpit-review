@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **UI: EN / KO i18n** — every dashboard label, filter chip, help
+  overlay row, evidence panel heading, and per-analyzer rationale
+  translated to Korean. Language toggle (EN / KO) in the header;
+  choice persists in `localStorage`. Default picks Korean when the
+  browser's `navigator.language` starts with `ko-`, else English.
 - **`test.time.sleep` v1** — flags `time.sleep(...)` and `sleep(...)`
   (when `from time import sleep`) inside `test_*` functions in test files.
   Flaky-test signal, `warn`. Real-repo pilot on pytest surfaced 4 hits, all
