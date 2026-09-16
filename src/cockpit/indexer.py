@@ -1,7 +1,8 @@
 """tree-sitter Python indexer. Parse → extract (symbols, source hash) → drop AST.
 PLAN §9.5: never keep the AST around."""
 from __future__ import annotations
-from dataclasses import dataclass
+import itertools
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -16,12 +17,21 @@ class Symbol:
     span: tuple[int, int]  # 1-indexed inclusive
 
 
+# Monotonic id generator. Analyzer caches key on FileIndex.generation
+# instead of id(FileIndex) — CPython recycles freed object ids from
+# its small-object arenas, and a resurrected file could otherwise hit
+# a stale window/finding cache with different content at the same address.
+# Monotonic ints never collide within a process.
+_next_generation = itertools.count(1)
+
+
 @dataclass(frozen=True)
 class FileIndex:
     path: str            # repo-relative POSIX
     content_hash: str
     lines: int
     symbols: tuple[Symbol, ...]
+    generation: int = field(default_factory=lambda: next(_next_generation))
 
 
 # Top-level defs + methods. Tightly scoped query — extend when analyzers need more.

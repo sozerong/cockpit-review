@@ -14,8 +14,10 @@ from __future__ import annotations
 import collections
 import datetime
 import json
+import sys
 import threading
 import time
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -261,6 +263,12 @@ class _State:
             self.cond.notify_all()
 
     def set(self, envelope: dict) -> None:
+        """Publish a new envelope. INVARIANT: once handed to set(),
+        the envelope dict is treated as read-only for the rest of its
+        life — HTTP handlers may serialize it concurrently. Callers
+        must build the envelope fully before this call. `_scan` +
+        `to_json` produce a fresh dict per call (dataclasses.asdict
+        recurses), so today's callers already satisfy this."""
         with self.cond:
             self.version += 1
             cur_ids = {f["id"] for f in envelope["findings"]}
@@ -349,30 +357,43 @@ def _scan(repo: Path, force_full: bool = False) -> dict:
 
 
 def _watch_loop(repo: Path) -> None:
+    """Watch the repo forever. Any exception inside a scan is logged and
+    the loop continues — a crashed scan must never wedge the UI into
+    perpetual "scanning…" (previous versions did exactly that)."""
+    def _safe_scan(force_full: bool = False) -> None:
+        _state.set_scanning(True)
+        try:
+            _state.set(_scan(repo, force_full=force_full))
+        except Exception:
+            print("cockpit serve: scan failed:", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+        finally:
+            _state.set_scanning(False)
+            _state.set_phase("idle")
+
     _state.set_phase("scanning", "cold start")
-    _state.set_scanning(True)
-    _state.set(_scan(repo, force_full=True))
-    _state.set_scanning(False)
-    _state.set_phase("idle")
+    _safe_scan(force_full=True)
 
     prev = _snapshot(repo)
     last_change_at: float | None = None
     while True:
-        time.sleep(POLL_INTERVAL)
-        cur = _snapshot(repo)
-        if cur != prev:
-            changed = _changed_paths(prev, cur)
-            _state.set_phase("debouncing",
-                             f"{len(changed)} files (waiting {DEBOUNCE:.1f}s quiet)")
-            last_change_at = time.monotonic()
-            prev = cur
-        elif last_change_at is not None and \
-                time.monotonic() - last_change_at >= DEBOUNCE:
-            _state.set_scanning(True)
-            _state.set(_scan(repo))    # incremental — scanner detects delta from cache
-            _state.set_scanning(False)
-            _state.set_phase("idle")
-            last_change_at = None
+        try:
+            time.sleep(POLL_INTERVAL)
+            cur = _snapshot(repo)
+            if cur != prev:
+                changed = _changed_paths(prev, cur)
+                _state.set_phase("debouncing",
+                                 f"{len(changed)} files (waiting {DEBOUNCE:.1f}s quiet)")
+                last_change_at = time.monotonic()
+                prev = cur
+            elif last_change_at is not None and \
+                    time.monotonic() - last_change_at >= DEBOUNCE:
+                _safe_scan()
+                last_change_at = None
+        except Exception:
+            print("cockpit serve: watch loop error:", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            time.sleep(POLL_INTERVAL)   # backoff before retrying
 
 
 def _changed_paths(prev: dict[str, float], cur: dict[str, float]) -> list[str]:
@@ -382,12 +403,41 @@ def _changed_paths(prev: dict[str, float], cur: dict[str, float]) -> list[str]:
     return sorted(added | removed | modified)[:20]
 
 
+MAX_WAITERS = 64           # long-poll fairness cap; past this we 503
+_ALLOWED_HOSTS: set[str] = set()   # populated by cmd_serve
+
+
 class _Handler(BaseHTTPRequestHandler):
+    # Kill slowloris — a client that opens a socket and never sends bytes
+    # will otherwise hold a thread until TCP FIN.
+    timeout = 15
+
+    # Drop the "Server: BaseHTTP/0.6 Python/3.11.x" fingerprint.
+    def version_string(self) -> str:
+        return "cockpit"
+
     def log_message(self, format: str, *args) -> None:
         pass  # ponytail: silence per-request access log
 
+    def _host_ok(self) -> bool:
+        """Reject requests with a Host header outside the allowlist.
+        DNS-rebinding defense: an external site can otherwise coerce
+        the browser into fetching http://127.0.0.1:port under its own
+        origin and reading source snippets."""
+        host = (self.headers.get("Host") or "").strip().lower()
+        if not _ALLOWED_HOSTS:
+            return True   # allowlist not configured — off by default
+        return host in _ALLOWED_HOSTS
+
     def do_GET(self) -> None:
-        url = urlparse(self.path)
+        if not self._host_ok():
+            self._send(400, "text/plain", b"host header rejected")
+            return
+        try:
+            url = urlparse(self.path)
+        except ValueError:
+            self._send(400, "text/plain", b"bad url")
+            return
         if url.path == "/":
             strings_json = json.dumps(_STRINGS, ensure_ascii=False)
             # Belt-and-suspenders against payload closing the injecting script tag.
@@ -395,7 +445,16 @@ class _Handler(BaseHTTPRequestHandler):
             page = _PAGE.replace("__STRINGS_JSON__", strings_json)
             self._send(200, "text/html; charset=utf-8", page.encode("utf-8"))
         elif url.path == "/state.json":
-            since = int((parse_qs(url.query).get("since") or ["-1"])[0])
+            try:
+                since = int((parse_qs(url.query).get("since") or ["-1"])[0])
+            except (ValueError, TypeError):
+                self._send(400, "application/json",
+                           b'{"error":"bad since"}')
+                return
+            if _state.waiters >= MAX_WAITERS:
+                self._send(503, "application/json",
+                           b'{"error":"too many waiters"}')
+                return
             version, envelope, scanning = _state.wait_after(since, WAIT_TIMEOUT)
             body = json.dumps({
                 "version": version,
@@ -405,34 +464,73 @@ class _Handler(BaseHTTPRequestHandler):
             }, ensure_ascii=False).encode("utf-8")
             self._send(200, "application/json", body)
         elif url.path == "/system.json":
-            # Cheap poll for the SYSTEM panel — no envelope round-trip.
             body = json.dumps(_state.snapshot_system(), ensure_ascii=False).encode("utf-8")
             self._send(200, "application/json", body)
         else:
             self._send(404, "text/plain", b"not found")
 
+    def do_HEAD(self) -> None:  # trivially supportable; some health checks use it
+        self.do_GET()
+
     def _send(self, status: int, ctype: str, body: bytes) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            # Defence-in-depth against injection into the HTML page:
+            # no framing, no MIME sniffing, no cross-origin embedding.
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "no-referrer")
+            if ctype.startswith("text/html"):
+                self.send_header(
+                    "Content-Security-Policy",
+                    "default-src 'none'; "
+                    "script-src 'unsafe-inline'; "  # inline JS is core to _PAGE
+                    "style-src 'unsafe-inline' https://fonts.googleapis.com; "
+                    "font-src https://fonts.gstatic.com; "
+                    "connect-src 'self'; "
+                    "img-src 'self' data:; "
+                    "frame-ancestors 'none'",
+                )
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            # Client disconnected mid-response. Fine — nothing to log.
+            pass
 
 
 def cmd_serve(repo: Path, port: int = 8765, host: str = "127.0.0.1") -> int:
     t = threading.Thread(target=_watch_loop, args=(repo,), daemon=True)
     t.start()
+
+    # Populate Host-header allowlist for DNS-rebinding defense.
+    _ALLOWED_HOSTS.clear()
+    _ALLOWED_HOSTS.update({
+        f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}",
+        f"127.0.0.1", "localhost", "[::1]",
+    })
+    if host not in ("127.0.0.1", "localhost", "::1", "0.0.0.0", "::"):
+        _ALLOWED_HOSTS.update({f"{host}:{port}", host})
+
     httpd = ThreadingHTTPServer((host, port), _Handler)
     shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
     url = f"http://{shown}:{port}"
     print(f"cockpit serve · {url}  (Ctrl-C to stop)")
     if host not in ("127.0.0.1", "localhost", "::1"):
-        print(f"  listening on {host}:{port} — reachable from other hosts on this network")
+        print(f"  ⚠  listening on {host}:{port} — reachable from other hosts on this network.",
+              file=sys.stderr)
+        print(f"     Findings, source snippets, and errors are served without auth.",
+              file=sys.stderr)
+        print(f"     Restrict to a Tailscale/VPN IP, or use --host 127.0.0.1.",
+              file=sys.stderr)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         print()
+        httpd.shutdown()
         return 0
 
 
@@ -861,7 +959,7 @@ try {
 } catch {}
 applyLang(lang);
 
-function esc(s) { return String(s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
 function render(envelope, freshIds) {
   window.__lastEnvelope = envelope;

@@ -140,11 +140,11 @@ class DupBlock:
     version = "5"
 
     def __init__(self) -> None:
-        # path -> (id(FileIndex), [(start_line_1indexed, joined_5_lines), ...])
-        # IncrementalScanner keeps a stable FileIndex object per unchanged
-        # file across scans, so `id()` identity is a valid cache key.
-        # Change detection happens at the IncrementalScanner layer — when a
-        # file changes we get a fresh FileIndex, id() differs, cache misses.
+        # path -> (FileIndex.generation, [(start_line_1indexed, joined_5_lines), ...])
+        # Monotonic generation counter (indexer._next_generation) instead of
+        # id() — CPython's small-object arenas recycle freed ids, and a
+        # resurrected FileIndex at the same address would produce a false
+        # cache hit against different content. Monotonic ints never repeat.
         self._windows_cache: dict[str, tuple[int, list[tuple[int, str]]]] = {}
 
     def analyze(self, cs: ChangeSet, indices: dict[str, FileIndex]) -> list[Finding]:
@@ -156,12 +156,12 @@ class DupBlock:
             cur_paths.add(fc.path)
             idx = indices[fc.path]
             cached = self._windows_cache.get(fc.path)
-            if cached is not None and cached[0] == id(idx):
+            if cached is not None and cached[0] == idx.generation:
                 windows = cached[1]
             else:
                 src = normalize_bytes(fc.absolute.read_bytes())
                 windows = _windows_in_bodies(src)
-                self._windows_cache[fc.path] = (id(idx), windows)
+                self._windows_cache[fc.path] = (idx.generation, windows)
             for start, win in windows:
                 buckets[hash(win)].append((fc.path, start, win))
         # Prune cache: files removed from the repo drop out of the working set.
