@@ -1,6 +1,58 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-09-16
+
+Live dashboard + machine receipt + a 27× speedup on the developer loop.
+
+**Live dashboard (`cockpit serve`).** Watch a repo in a browser; the
+findings list, evidence panel, analyzer chart, and pipeline state machine
+update the moment you save a file. i18n EN / KO. Interactive route
+tracing across every panel. SYSTEM panel visualization designed by an
+independent design pass (5-node state spine, per-scan analyzer timing
+strip, thread health, all in SVG per a designer spec).
+
+**Machine receipt (`cockpit diff`).** Two schema-1 envelopes go in, a
+typed receipt comes out — added / resolved / moved / stable counts split
+by severity plus per-finding rows. `--format json` or `--format markdown`
+for PR-comment shape. Wired into the CI workflow: PR comments now show
+"you added 3 warns, resolved 5" instead of an ad-hoc filter.
+
+**Incremental scanner — the M0.2 UX goal shipped.**
+`cockpit.incremental.IncrementalScanner` caches per-file indices +
+per-analyzer per-file findings. `FileListCache` caches the FS walk with
+`.git/index` + `.git/HEAD` mtime sentinels. `DupBlock` and
+`NoTestForPublic` add windows-per-file / findings-per-file caches keyed
+by `id(FileIndex)` for O(1) invalidation.
+
+  fastapi (1138 files) — save-to-dashboard-update:
+  - v0.1.0: 5834ms (full scan every time)
+  - v0.2.0: **212ms** (27× speedup)
+
+**Three new analyzers.**
+- `except.reraise-vs-raise` v1 — `raise <alias>` truncates traceback; use
+  bare `raise`.
+- `arg.mutable-default` v1 — `def f(x=[])`, `x={}`, `x=set()`, `x=list()`.
+- `test.time.sleep` v1 — flaky-test signal.
+
+**pytest suite scaffolded.** 69 tests, 4.6s wall. CI matrix
+Linux × macOS × Windows × Python 3.11, 3.12. Gates the self-scan step.
+
+**Windows JSON safety.** `cockpit check --json` uses `ensure_ascii=True`
+and CLI stdout is forced to UTF-8 with `errors=replace` — legacy consoles
+(cp949/cp1252) can't crash the tool on em-dashes or non-ASCII paths.
+
+**cockpit serve --host.** Bind address flag. `0.0.0.0` for LAN or a
+specific Tailscale IP for tailnet-only reach. Default `127.0.0.1`.
+
+**Design canvas.** `design/` — four artboards on a Claude Design canvas:
+Main (findings view), Dashboard (four-panel §7 vision), Retro instrument
+(direction A), Editorial (direction B).
+
+**Docs.** `ROADMAP.md` sets M0.2 → M0.5 → M1.0 milestones with commit
+constraints. `RELEASE.md` + `RELEASE_NOTES.md` for the PyPI + GitHub
+Release paths.
+
+### 0.2.0 — detailed changes
 
 - **perf: `test.no-test-for-public-symbol` per-file cache + O(1) test
   index** — completes the incremental scan sweep. The analyzer now
@@ -136,6 +188,8 @@
   across file/analyzer/symbol, click-to-expand evidence. No CDN, no build
   tools, no runtime dependencies beyond a modern browser. PLAN §7 RISK
   panel MVP.
+
+## Unreleased
 
 ## 0.1.0 — 2026-09-11
 
