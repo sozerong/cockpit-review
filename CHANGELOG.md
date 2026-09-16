@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **tests: pytest suite scaffolded** — `tests/` with a shared `make_repo`
+  fixture and 37 initial tests covering the three new analyzers
+  (`except.reraise-vs-raise`, `arg.mutable-default`, `test.time.sleep`),
+  baseline save/load + finding-id stability, and the serve `_State`
+  machine + `_scan` telemetry keys. Runs in 1.7s. 44% line coverage.
+- **CI: pytest matrix** — Linux + macOS + Windows × Python 3.11, 3.12.
+  Runs before the cockpit self-scan gate; both must pass.
+- **docs: ROADMAP.md** — M0.2 (local tool), M0.5 (team tool), M1.0 (SaaS)
+  milestone plan with the constraints the product commits to.
 - **UI: SYSTEM panel visualization (v2)** — text tables replaced with an
   SVG pipeline spine per designer spec. 5-node state machine
   (starting → idle → debouncing → scanning → emitting) as horizontal

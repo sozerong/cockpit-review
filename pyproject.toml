@@ -24,6 +24,9 @@ dependencies = [
     "tree-sitter-python>=0.23",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov>=5"]
+
 [project.urls]
 "Source" = "https://github.com/sozerong/cockpit-review"
 "Design brief" = "https://github.com/sozerong/cockpit-review/blob/main/PROJECT_BRIEF.md"
