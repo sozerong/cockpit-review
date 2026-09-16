@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **perf: dup.block windows-per-file cache** — DupBlock keeps a
+  per-file cache of extracted 5-line windows keyed by
+  `id(FileIndex)`. IncrementalScanner keeps unchanged files' FileIndex
+  objects alive across scans, so identity comparison is a valid change
+  detector. On fastapi (1138 files) dup.block goes from **1913ms →
+  114ms** on a warm rescan — 17× reduction on the analyzer that
+  dominated the previous incremental measurement. Total warm scan is
+  now **1138ms** (2900ms → 1138ms, further 2.6× on top of the previous
+  incremental commit). Remaining warm-scan cost is now the ChangeSet
+  FS-walk (779ms) — next incremental target.
 - **perf: incremental scanner** — `cockpit.incremental.IncrementalScanner`
   caches per-file indices and per-analyzer per-file findings across scans.
   On a warm rescan, unchanged files reuse cached indices and cached

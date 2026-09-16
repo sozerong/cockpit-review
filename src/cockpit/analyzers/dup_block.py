@@ -139,14 +139,35 @@ class DupBlock:
     # testing/, examples/, docs_src/, docs/.
     version = "5"
 
+    def __init__(self) -> None:
+        # path -> (id(FileIndex), [(start_line_1indexed, joined_5_lines), ...])
+        # IncrementalScanner keeps a stable FileIndex object per unchanged
+        # file across scans, so `id()` identity is a valid cache key.
+        # Change detection happens at the IncrementalScanner layer — when a
+        # file changes we get a fresh FileIndex, id() differs, cache misses.
+        self._windows_cache: dict[str, tuple[int, list[tuple[int, str]]]] = {}
+
     def analyze(self, cs: ChangeSet, indices: dict[str, FileIndex]) -> list[Finding]:
         buckets: dict[int, list[tuple[str, int, str]]] = defaultdict(list)
+        cur_paths: set[str] = set()
         for fc in cs.files:
             if fc.status == "deleted" or fc.path not in indices:
                 continue
-            src = normalize_bytes(fc.absolute.read_bytes())
-            for start, win in _windows_in_bodies(src):
+            cur_paths.add(fc.path)
+            idx = indices[fc.path]
+            cached = self._windows_cache.get(fc.path)
+            if cached is not None and cached[0] == id(idx):
+                windows = cached[1]
+            else:
+                src = normalize_bytes(fc.absolute.read_bytes())
+                windows = _windows_in_bodies(src)
+                self._windows_cache[fc.path] = (id(idx), windows)
+            for start, win in windows:
                 buckets[hash(win)].append((fc.path, start, win))
+        # Prune cache: files removed from the repo drop out of the working set.
+        for p in list(self._windows_cache):
+            if p not in cur_paths:
+                del self._windows_cache[p]
 
         raw: list[Finding] = []
         for group in buckets.values():

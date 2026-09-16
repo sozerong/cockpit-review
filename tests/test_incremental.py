@@ -148,3 +148,53 @@ def test_analyzer_timings_have_cross_file_flag(tmp_path):
     by_id = {t["id"]: t for t in env["timings"]["analyzers"]}
     assert by_id["dup.block"]["cross_file"] is True
     assert by_id["arg.mutable-default"]["cross_file"] is False
+
+
+def test_dup_block_window_cache_reuses_unchanged_files(tmp_path):
+    """dup.block's window cache keys on id(FileIndex). An unchanged file
+    keeps the same FileIndex object across scans, so the cache must hit."""
+    body = "def f():\n    x = 1\n    y = 2\n    z = 3\n    w = 4\n    return x + y + z + w\n"
+    _write(tmp_path, "a.py", body)
+    _write(tmp_path, "b.py", body)
+
+    from cockpit.analyzers.dup_block import DupBlock
+    from cockpit.analyzers import ANALYZERS
+    dup = next(a for a in ANALYZERS if isinstance(a, DupBlock))
+    dup._windows_cache.clear()   # start fresh for the test
+
+    scan = IncrementalScanner()
+    scan.scan(tmp_path)
+    after_first = {p: idx for p, (idx, _) in dup._windows_cache.items()}
+    assert set(after_first) == {"a.py", "b.py"}
+
+    # Second scan without any file changes — cache identity must be preserved.
+    scan.scan(tmp_path)
+    after_second = {p: idx for p, (idx, _) in dup._windows_cache.items()}
+    assert after_first == after_second, "cache identity ids drifted despite no changes"
+
+    # Now modify a.py — its entry rebuilds, b.py's stays.
+    time.sleep(0.05)
+    _write(tmp_path, "a.py", body + "def g():\n    return 42\n")
+    scan.scan(tmp_path)
+    after_third = {p: idx for p, (idx, _) in dup._windows_cache.items()}
+    assert after_third["b.py"] == after_first["b.py"], "unchanged file's cache entry drifted"
+    assert after_third["a.py"] != after_first["a.py"], "changed file's cache entry did not rebuild"
+
+
+def test_dup_block_cache_drops_removed_files(tmp_path):
+    body = "def f():\n    x = 1\n    y = 2\n    z = 3\n    w = 4\n    return x + y + z + w\n"
+    _write(tmp_path, "a.py", body)
+    _write(tmp_path, "b.py", body)
+
+    from cockpit.analyzers.dup_block import DupBlock
+    from cockpit.analyzers import ANALYZERS
+    dup = next(a for a in ANALYZERS if isinstance(a, DupBlock))
+    dup._windows_cache.clear()
+
+    scan = IncrementalScanner()
+    scan.scan(tmp_path)
+    assert "b.py" in dup._windows_cache
+
+    (tmp_path / "b.py").unlink()
+    scan.scan(tmp_path)
+    assert "b.py" not in dup._windows_cache, "dup.block cache retained a removed file"
