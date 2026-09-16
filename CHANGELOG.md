@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **perf: FS-walk cache + normalize_path fast path** — completes the
+  third incremental milestone. `FileListCache` in `cockpit.scanner`
+  caches `scan()` output per repo, invalidated by `.git/index` +
+  `.git/HEAD` mtime sentinels. `normalize_path` skips its redundant
+  `.resolve()` calls (which cost ~200µs each on Windows, ~300ms on
+  fastapi at 1138 files). Combined win on fastapi (1138 files):
+  cold **5.8s** (from 12.5s), **warm 1-file edit 380ms** (from 2900ms
+  → 1170ms → **380ms**). Total speedup 7.6× on warm rescan vs the
+  original incremental commit, 17× vs original full scan. Warm scan
+  now dominated by cross-file analyzers (dup.block 80ms +
+  test.no-test-for-public-symbol 114ms = 194ms of 327ms).
 - **perf: dup.block windows-per-file cache** — DupBlock keeps a
   per-file cache of extracted 5-line windows keyed by
   `id(FileIndex)`. IncrementalScanner keeps unchanged files' FileIndex

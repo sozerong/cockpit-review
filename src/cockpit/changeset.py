@@ -7,9 +7,13 @@ from typing import Literal
 import subprocess
 
 from .normalize import normalize_path
-from .scanner import scan
+from .scanner import FileListCache, scan
 
 Kind = Literal["full", "diff", "watch"]
+
+# Module-level file list cache — cheap to keep, saves ~150ms per warm
+# scan on fastapi. Callers that need isolation build their own FileListCache.
+_default_list_cache = FileListCache()
 
 
 @dataclass(frozen=True)
@@ -28,11 +32,12 @@ class ChangeSet:
     files: tuple[FileChange, ...] = field(default_factory=tuple)
 
 
-def full_scan(repo: Path) -> ChangeSet:
+def full_scan(repo: Path, cache: FileListCache | None = None) -> ChangeSet:
     repo = repo.resolve()
+    lc = cache if cache is not None else _default_list_cache
     files = tuple(
         FileChange(path=normalize_path(repo, p), absolute=p, status="present")
-        for p in scan(repo)
+        for p in lc.scan(repo)
     )
     return ChangeSet(repo=repo, kind="full", base=None, head="working", files=files)
 
