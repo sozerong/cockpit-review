@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **`cockpit diff <base> <head>`** — new subcommand. Machine-readable
+  receipt of what changed between two envelopes: `added` / `resolved` /
+  `moved` (same id, new location) / `stable` counts split by severity,
+  plus per-finding rows. `--format json` (machine contract, schema=1)
+  or `--format markdown` (PR-comment shaped, hides info-only). Adapted
+  from Archify's "Architecture Delta / machine receipt" concept —
+  formalises what our baseline-diff view was already implying.
+- **CI: PR comments now use `cockpit diff`** — workflow scans HEAD and
+  the merge base (via a shallow worktree), builds a receipt, comments
+  the markdown format on the PR. Replaces the ad-hoc "current findings
+  minus baseline" summary. Silent on no-meaningful-change.
+- **CLI: force UTF-8 stdout/stderr on Windows** — legacy consoles
+  (cp949/cp1252) can't handle em-dashes or non-ASCII paths in tool
+  output. Now safe by construction.
 - **tests: pytest suite scaffolded** — `tests/` with a shared `make_repo`
   fixture and 37 initial tests covering the three new analyzers
   (`except.reraise-vs-raise`, `arg.mutable-default`, `test.time.sleep`),
