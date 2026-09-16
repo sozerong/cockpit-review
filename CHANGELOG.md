@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **perf: `test.no-test-for-public-symbol` per-file cache + O(1) test
+  index** — completes the incremental scan sweep. The analyzer now
+  keeps two caches: normalized test-file source blobs keyed by
+  `id(FileIndex)`, and per-src findings keyed by
+  `(id(src_idx), tuple of id(test_idx))`. Both invalidate on identity
+  drift, so unchanged src + unchanged tests = cache hit and skip the
+  regex search. Also replaces the per-src O(N_paths) name scan with a
+  once-per-scan `_build_test_index` bucketing by basename — O(1) lookup
+  per src. **Analyzer cost on fastapi: 124ms → 3ms** (40× drop).
+  **Total warm scan: 196ms**, hitting the M0.2 sub-200ms goal — 27×
+  cumulative speedup vs original full scan.
 - **perf: FS-walk cache + normalize_path fast path** — completes the
   third incremental milestone. `FileListCache` in `cockpit.scanner`
   caches `scan()` output per repo, invalidated by `.git/index` +

@@ -14,9 +14,10 @@ Deterministic Python analyzer with a real test suite, real distribution.
 - [ ] pytest coverage → 70%+ (migrate remaining demo() self-checks: dup.block,
       error-masking, assertion-free, always-true-assertion, no-test-for-public)
 - [ ] `test.mocks-target` v2 with SUT detection (re-enable after ≥0.75 precision pilot)
-- [ ] **Incremental scan** — only rescan changed files. Target: fastapi 5.8s → <200ms
-      after first scan (fastapi live save-to-update currently 7.4s; incremental is the
-      biggest UX blocker measured)
+- [x] **Incremental scan** — target hit. fastapi 1138 files:
+      cold 5.4s (from 12.5s), warm 1-file edit 212ms (from 2.9s), 27× vs cold.
+      Three commits: IncrementalScanner + dup.block window cache +
+      FS-walk cache + normalize_path fast path + no-test-for-public cache + O(1) test index.
 - [ ] Cross-platform CI on Linux + macOS + Windows (added, needs green run)
 - [ ] PyPI publish v0.2.0
 - [ ] GitHub Release with wheel + sdist artifacts
@@ -57,6 +58,17 @@ Hosted service. Real product.
 - LLM-assisted **outputs** (refactor prompts, PR summaries) — never in the
   detection path, always downstream of a deterministic finding
 - Custom rule DSL — teams define their own patterns without writing Python
+
+## Analyzer ideas — the wishlist
+
+- **`ponytail.reinvented`** — detect code that a stdlib call or a
+  common library would replace in 1-3 lines. E.g. hand-written
+  `for x in lst: if x == target: return True` → `target in lst`;
+  manual retry loop → `tenacity`; custom lru cache → `functools.lru_cache`;
+  hand-written CSV split → `csv.reader`. The tool literally practising
+  what its own philosophy preaches. Idea from a user in Sep 2026 —
+  "you built it the hard way, turns out there's a library and 3 lines
+  would've done it."
 
 ## Goals stated as constraints
 

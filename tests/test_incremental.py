@@ -181,6 +181,60 @@ def test_dup_block_window_cache_reuses_unchanged_files(tmp_path):
     assert after_third["a.py"] != after_first["a.py"], "changed file's cache entry did not rebuild"
 
 
+def test_no_test_for_public_reuses_cache(tmp_path):
+    """no-test-for-public per-src cache is keyed by (id(src_idx), tuple of
+    id(test_idx)). Unchanged src + unchanged test = cache hit."""
+    _write(tmp_path, "widget.py",
+           "def orphan_helper(): return 2\n"
+           "def tested_helper(): return 1\n")
+    _write(tmp_path, "test_widget.py",
+           "from widget import tested_helper\n"
+           "def test_things(): assert tested_helper() == 1\n")
+
+    from cockpit.analyzers.no_test_for_public import NoTestForPublic
+    from cockpit.analyzers import ANALYZERS
+    ntp = next(a for a in ANALYZERS if isinstance(a, NoTestForPublic))
+    ntp._src_cache.clear()
+    ntp._test_blob_cache.clear()
+
+    scan = IncrementalScanner()
+    env0 = scan.scan(tmp_path)
+    hits0 = [f for f in env0["findings"] if f["analyzer_id"] == "test.no-test-for-public-symbol"]
+    assert {f["symbol"] for f in hits0} == {"orphan_helper"}
+    assert "widget.py" in ntp._src_cache
+    assert "test_widget.py" in ntp._test_blob_cache
+
+    # Second scan, no changes: cache identity must be preserved.
+    identity_before = (ntp._src_cache["widget.py"][0], ntp._src_cache["widget.py"][1])
+    scan.scan(tmp_path)
+    identity_after = (ntp._src_cache["widget.py"][0], ntp._src_cache["widget.py"][1])
+    assert identity_before == identity_after
+
+
+def test_no_test_for_public_busts_when_test_file_changes(tmp_path):
+    """Editing the test file must rebuild the src's cache entry — the src
+    itself is unchanged but its coverage judgement may have changed."""
+    _write(tmp_path, "widget.py", "def orphan(): return 1\n")
+    _write(tmp_path, "test_widget.py", "def test_x(): assert True\n")
+
+    from cockpit.analyzers.no_test_for_public import NoTestForPublic
+    from cockpit.analyzers import ANALYZERS
+    ntp = next(a for a in ANALYZERS if isinstance(a, NoTestForPublic))
+    ntp._src_cache.clear()
+    ntp._test_blob_cache.clear()
+
+    scan = IncrementalScanner()
+    env0 = scan.scan(tmp_path)
+    assert len([f for f in env0["findings"] if f["analyzer_id"] == "test.no-test-for-public-symbol"]) == 1
+
+    # Update the test to reference the orphan — finding should vanish.
+    time.sleep(0.05)
+    _write(tmp_path, "test_widget.py", "def test_x(): from widget import orphan; assert orphan() == 1\n")
+    env1 = scan.scan(tmp_path)
+    hits = [f for f in env1["findings"] if f["analyzer_id"] == "test.no-test-for-public-symbol"]
+    assert hits == [], "cache was not invalidated when test file changed"
+
+
 def test_dup_block_cache_drops_removed_files(tmp_path):
     body = "def f():\n    x = 1\n    y = 2\n    z = 3\n    w = 4\n    return x + y + z + w\n"
     _write(tmp_path, "a.py", body)
