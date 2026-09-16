@@ -21,7 +21,8 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
 from . import baseline as bl
-from .watch import _run_once, _snapshot, POLL_INTERVAL, DEBOUNCE
+from .incremental import IncrementalScanner
+from .watch import _snapshot, POLL_INTERVAL, DEBOUNCE
 
 
 WAIT_TIMEOUT = 25.0     # long-poll ceiling before returning current state
@@ -32,32 +33,200 @@ ACTIVITY_LEN = 12       # rolling scan-event log for the NOW panel
 # analyzer roster so a new analyzer added to __init__.py without a
 # rationale here still renders (falls back to the analyzer id).
 _RATIONALES = {
-    "dup.block":
-        "5+ line duplicate windows inside function bodies. "
-        "String-dominant blocks filtered; tests/examples/docs downgraded; "
-        "clusters of >5 copies collapse to one info.",
-    "risk.error-masking":
-        "except body is only pass/…, split by broadness: "
-        "bare `except:` or `except Exception:` → warn; "
-        "`except SpecificError:` → info.",
-    "except.reraise-vs-raise":
-        "`raise <alias>` in `except X as <alias>:` truncates traceback. "
-        "Bare `raise` preserves it.",
-    "arg.mutable-default":
-        "Default is evaluated once at def-time. `def f(x=[]):` shares "
-        "one list across every call — classic hidden state.",
-    "test.assertion-free":
-        "test_* function with no assert*, pytest.raises, or unittest self.assert*. "
-        "Runs, passes, checks nothing.",
-    "test.always-true-assertion":
-        "assert on a truthy literal (True, non-empty container, non-zero number). "
-        "Always passes regardless of code.",
-    "test.no-test-for-public-symbol":
-        "Public top-level symbol has no test_<name> anywhere in the parallel "
-        "tests/ tree.",
-    "test.time.sleep":
-        "`time.sleep(...)` inside a test_* function. Waiting on wall time in "
-        "tests is a flakiness antipattern; use event-driven waits.",
+    "en": {
+        "dup.block":
+            "5+ line duplicate windows inside function bodies. "
+            "String-dominant blocks filtered; tests/examples/docs downgraded; "
+            "clusters of >5 copies collapse to one info.",
+        "risk.error-masking":
+            "except body is only pass/…, split by broadness: "
+            "bare `except:` or `except Exception:` → warn; "
+            "`except SpecificError:` → info.",
+        "except.reraise-vs-raise":
+            "`raise <alias>` in `except X as <alias>:` truncates traceback. "
+            "Bare `raise` preserves it.",
+        "arg.mutable-default":
+            "Default is evaluated once at def-time. `def f(x=[]):` shares "
+            "one list across every call — classic hidden state.",
+        "test.assertion-free":
+            "test_* function with no assert*, pytest.raises, or unittest self.assert*. "
+            "Runs, passes, checks nothing.",
+        "test.always-true-assertion":
+            "assert on a truthy literal (True, non-empty container, non-zero number). "
+            "Always passes regardless of code.",
+        "test.no-test-for-public-symbol":
+            "Public top-level symbol has no test_<name> anywhere in the parallel "
+            "tests/ tree.",
+        "test.time.sleep":
+            "`time.sleep(...)` inside a test_* function. Waiting on wall time in "
+            "tests is a flakiness antipattern; use event-driven waits.",
+    },
+    "ko": {
+        "dup.block":
+            "함수 본문 안에서 5행 이상 중복되는 코드 블록. "
+            "문자열 위주 블록은 걸러내고, tests/examples/docs는 등급 강등, "
+            "5개 초과 클러스터는 info 하나로 축약.",
+        "risk.error-masking":
+            "except 본문이 pass/… 뿐인 경우. 예외 광범위성으로 분류: "
+            "bare `except:` 또는 `except Exception:` → warn, "
+            "`except 특정예외:` → info.",
+        "except.reraise-vs-raise":
+            "`except X as e:` 다음 `raise e`는 원래 traceback을 잘라냄. "
+            "그냥 `raise`만 쓰면 traceback이 보존됨.",
+        "arg.mutable-default":
+            "기본값은 def 선언 시점에 1회 평가됨. `def f(x=[]):`는 "
+            "모든 호출이 하나의 리스트를 공유 — 대표적인 숨은 상태 버그.",
+        "test.assertion-free":
+            "test_* 함수인데 assert*, pytest.raises, self.assert* 어느 것도 없음. "
+            "실행되고 통과하지만 아무것도 검증 안 함.",
+        "test.always-true-assertion":
+            "항상 참인 리터럴에 대한 assert (True, 비어있지 않은 컨테이너, 0이 아닌 숫자). "
+            "코드와 무관하게 항상 통과함.",
+        "test.no-test-for-public-symbol":
+            "public 최상위 심볼이지만 tests/ 트리에 대응하는 test_<name>이 없음.",
+        "test.time.sleep":
+            "test_* 함수 안의 `time.sleep(...)`. 테스트에서 실시간 대기는 "
+            "flaky 신호 — 이벤트 기반 대기(async, fixture)로 바꿔야 함.",
+    },
+}
+
+
+# UI strings for the dashboard. Any key missing in "ko" falls back to "en".
+_STRINGS = {
+    "en": {
+        "connecting": "connecting…",
+        "live": "live", "scanning": "scanning…", "disconnected": "disconnected",
+        "block": "block", "warn": "warn", "info": "info",
+        "files": "files",
+        "mode_new": "new only", "mode_all": "all", "mode_baselined": "baselined",
+        "mode_new_title": "hide baselined findings (press N)",
+        "mode_all_title": "show every finding",
+        "mode_baselined_title": "show only baselined findings",
+        "search": "filter by file, analyzer, symbol…  /",
+        "help_btn": "show keyboard shortcuts",
+        "of": "of",
+        "risk_title": "Risk", "risk_hint": "findings · j / k to navigate",
+        "evidence_title": "Evidence",
+        "evidence_empty_html":
+            "Select a finding — press <kbd>j</kbd> or click a row.",
+        "delta_title": "Delta · analyzer counts",
+        "delta_hint": "& recent scans",
+        "no_findings_match": "No findings match the current filters.",
+        "no_findings": "no findings",
+        "waiting": "waiting…",
+        "how_detected": "How this was detected",
+        "snippet": "Snippet",
+        "matches": "Matches",
+        "raw_evidence": "Raw evidence",
+        "baseline_tag": "baseline",
+        "help_h": "keyboard",
+        "help_jk": "next / previous finding",
+        "help_enter": "expand selected finding",
+        "help_123": "toggle block / warn / info",
+        "help_n": "cycle: new only → all → baselined",
+        "help_slash": "focus search",
+        "help_esc": "blur search / close this",
+        "help_q": "toggle this overlay",
+        "activity_findings": "findings",
+        "activity_files": "files",
+        "system_title": "System · pipeline",
+        "system_hint": "threads · analyzer timings · state machine",
+        "phase_starting": "starting", "phase_idle": "idle",
+        "phase_detecting": "detecting", "phase_debouncing": "debouncing",
+        "phase_scanning": "scanning", "phase_emitting": "emitting",
+        "phase_stuck_suffix": " · stuck",
+        "in_state": "in state",
+        "recent_events": "Recent transitions",
+        "sys_stage": "Stage timings",
+        "sys_no_scan": "No scan yet",
+        "sys_threads": "Threads",
+        "sys_uptime": "Uptime",
+        "sys_waiters": "Long-poll clients",
+        "sys_version": "State version",
+        "sys_idx_err": "Indexer errors",
+        "sys_ana_err": "Analyzer errors",
+        "sys_version_short": "v",
+        "sys_uptime_short": "up",
+        "sys_waiters_short": "waiters",
+        "sys_threads_short": "threads",
+        "sys_timing_total": "total",
+        "sys_timing_index": "index",
+        "sys_timing_changeset": "parse",
+        "sys_waiting": "waiting for first scan…",
+        "tracing": "tracing",
+        "trace_clear": "clear",
+        "trace_kind_analyzer": "analyzer",
+        "trace_kind_file": "file",
+        "trace_hits": "matches",
+        "trace_hint": "click a location or analyzer id to trace across panels",
+    },
+    "ko": {
+        "connecting": "연결 중…",
+        "live": "실시간", "scanning": "스캔 중…", "disconnected": "연결 끊김",
+        "block": "block", "warn": "warn", "info": "info",
+        "files": "파일",
+        "mode_new": "신규만", "mode_all": "전체", "mode_baselined": "baseline",
+        "mode_new_title": "baseline에 있는 것 숨김 (N 키)",
+        "mode_all_title": "모든 finding 표시",
+        "mode_baselined_title": "baseline에 있는 것만 표시",
+        "search": "파일 / analyzer / symbol 검색…  /",
+        "help_btn": "키보드 단축키",
+        "of": "/",
+        "risk_title": "위험도", "risk_hint": "findings · j / k 로 이동",
+        "evidence_title": "근거",
+        "evidence_empty_html":
+            "finding을 선택하세요 — <kbd>j</kbd> 키 또는 행 클릭.",
+        "delta_title": "델타 · analyzer 별 개수",
+        "delta_hint": "· 최근 스캔",
+        "no_findings_match": "현재 필터에 해당하는 finding이 없습니다.",
+        "no_findings": "finding 없음",
+        "waiting": "대기 중…",
+        "how_detected": "탐지 근거",
+        "snippet": "코드",
+        "matches": "매치",
+        "raw_evidence": "원본 evidence",
+        "baseline_tag": "baseline",
+        "help_h": "키보드",
+        "help_jk": "다음 / 이전 finding",
+        "help_enter": "선택된 finding 펼치기",
+        "help_123": "block / warn / info 토글",
+        "help_n": "사이클: 신규만 → 전체 → baseline",
+        "help_slash": "검색 포커스",
+        "help_esc": "검색 blur / 닫기",
+        "help_q": "이 오버레이 토글",
+        "activity_findings": "findings",
+        "activity_files": "파일",
+        "system_title": "시스템 · 파이프라인",
+        "system_hint": "스레드 · analyzer 타이밍 · 상태 머신",
+        "phase_starting": "시작 중", "phase_idle": "대기",
+        "phase_detecting": "감지 중", "phase_debouncing": "디바운스",
+        "phase_scanning": "스캔 중", "phase_emitting": "전송",
+        "phase_stuck_suffix": " · 정체",
+        "in_state": "이 상태",
+        "recent_events": "최근 상태 전환",
+        "sys_stage": "단계별 소요",
+        "sys_no_scan": "스캔 대기 중",
+        "sys_threads": "스레드",
+        "sys_uptime": "가동",
+        "sys_waiters": "long-poll 클라이언트",
+        "sys_version": "상태 버전",
+        "sys_idx_err": "인덱서 오류",
+        "sys_ana_err": "analyzer 오류",
+        "sys_version_short": "v",
+        "sys_uptime_short": "가동",
+        "sys_waiters_short": "대기 클라",
+        "sys_threads_short": "스레드",
+        "sys_timing_total": "합계",
+        "sys_timing_index": "인덱스",
+        "sys_timing_changeset": "파싱",
+        "sys_waiting": "첫 스캔 대기 중…",
+        "tracing": "추적",
+        "trace_clear": "해제",
+        "trace_kind_analyzer": "analyzer",
+        "trace_kind_file": "파일",
+        "trace_hits": "매칭",
+        "trace_hint": "위치나 analyzer id를 클릭하면 여러 패널에 걸쳐 추적됨",
+    },
 }
 
 
@@ -70,6 +239,26 @@ class _State:
         self.scanning = False
         self.activity: collections.deque = collections.deque(maxlen=ACTIVITY_LEN)
         self.prev_ids: set[str] = set()
+        # Pipeline state machine + system telemetry surfaced to the UI.
+        self.phase = "starting"     # idle | detecting | debouncing | scanning | emitting
+        self.phase_at = time.monotonic()
+        self.waiters = 0            # long-poll clients currently blocked in wait_after
+        self.events: collections.deque = collections.deque(maxlen=30)
+        self.started_at = time.time()
+
+    def set_phase(self, phase: str, detail: str = "") -> None:
+        with self.cond:
+            now = time.monotonic()
+            elapsed = now - self.phase_at
+            self.events.appendleft({
+                "at": datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3],
+                "phase": phase,
+                "detail": detail,
+                "prev_ms": round(elapsed * 1000),
+            })
+            self.phase = phase
+            self.phase_at = now
+            self.cond.notify_all()
 
     def set(self, envelope: dict) -> None:
         with self.cond:
@@ -94,13 +283,34 @@ class _State:
         with self.cond:
             if self.version > since:
                 return self.version, self.envelope, self.scanning
-            self.cond.wait(timeout=timeout)
+            self.waiters += 1
+            self.cond.notify_all()   # let system.json see the new waiter count
+            try:
+                self.cond.wait(timeout=timeout)
+            finally:
+                self.waiters -= 1
             return self.version, self.envelope, self.scanning
 
     def set_scanning(self, on: bool) -> None:
         with self.cond:
             self.scanning = on
             self.cond.notify_all()
+
+    def snapshot_system(self) -> dict:
+        """Runtime telemetry — safe to read without touching the envelope."""
+        with self.cond:
+            return {
+                "phase": self.phase,
+                "phase_elapsed_ms": round((time.monotonic() - self.phase_at) * 1000),
+                "waiters": self.waiters,
+                "version": self.version,
+                "uptime_s": round(time.time() - self.started_at, 1),
+                "threads": [
+                    {"name": t.name, "daemon": t.daemon, "alive": t.is_alive()}
+                    for t in threading.enumerate()
+                ],
+                "events": list(self.events),
+            }
 
 
 _state = _State()
@@ -118,25 +328,32 @@ def _counts_by_analyzer(findings: list[dict]) -> list[dict]:
     return out
 
 
-def _scan(repo: Path) -> dict:
-    """Run analyzers + annotate each finding with `baselined` bool and
-    a `rationale` string. Baseline is re-read on every scan."""
-    env = _run_once(repo)
+_scanner = IncrementalScanner()
+
+
+def _scan(repo: Path, force_full: bool = False) -> dict:
+    """Wrap incremental scan with baseline + rationale annotations."""
+    env = _scanner.scan(repo, force_full=force_full, set_phase=_state.set_phase)
+
     baselined = bl.load(repo)
     env["has_baseline"] = baselined is not None
     baselined = baselined or set()
     for f in env["findings"]:
         f["baselined"] = f["id"] in baselined
-        f["rationale"] = _RATIONALES.get(f["analyzer_id"], "")
+        aid = f["analyzer_id"]
+        f["rationale"] = _RATIONALES["en"].get(aid, "")
+        f["rationale_ko"] = _RATIONALES["ko"].get(aid, "")
     env["summary"]["baselined"] = sum(1 for f in env["findings"] if f["baselined"])
     env["summary"]["new"] = len(env["findings"]) - env["summary"]["baselined"]
     return env
 
 
 def _watch_loop(repo: Path) -> None:
+    _state.set_phase("scanning", "cold start")
     _state.set_scanning(True)
-    _state.set(_scan(repo))
+    _state.set(_scan(repo, force_full=True))
     _state.set_scanning(False)
+    _state.set_phase("idle")
 
     prev = _snapshot(repo)
     last_change_at: float | None = None
@@ -144,14 +361,25 @@ def _watch_loop(repo: Path) -> None:
         time.sleep(POLL_INTERVAL)
         cur = _snapshot(repo)
         if cur != prev:
+            changed = _changed_paths(prev, cur)
+            _state.set_phase("debouncing",
+                             f"{len(changed)} files (waiting {DEBOUNCE:.1f}s quiet)")
             last_change_at = time.monotonic()
             prev = cur
         elif last_change_at is not None and \
                 time.monotonic() - last_change_at >= DEBOUNCE:
             _state.set_scanning(True)
-            _state.set(_scan(repo))
+            _state.set(_scan(repo))    # incremental — scanner detects delta from cache
             _state.set_scanning(False)
+            _state.set_phase("idle")
             last_change_at = None
+
+
+def _changed_paths(prev: dict[str, float], cur: dict[str, float]) -> list[str]:
+    added = cur.keys() - prev.keys()
+    removed = prev.keys() - cur.keys()
+    modified = {k for k in cur.keys() & prev.keys() if cur[k] != prev[k]}
+    return sorted(added | removed | modified)[:20]
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -161,7 +389,11 @@ class _Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         url = urlparse(self.path)
         if url.path == "/":
-            self._send(200, "text/html; charset=utf-8", _PAGE.encode("utf-8"))
+            strings_json = json.dumps(_STRINGS, ensure_ascii=False)
+            # Belt-and-suspenders against payload closing the injecting script tag.
+            strings_json = strings_json.replace("</", "<\\/")
+            page = _PAGE.replace("__STRINGS_JSON__", strings_json)
+            self._send(200, "text/html; charset=utf-8", page.encode("utf-8"))
         elif url.path == "/state.json":
             since = int((parse_qs(url.query).get("since") or ["-1"])[0])
             version, envelope, scanning = _state.wait_after(since, WAIT_TIMEOUT)
@@ -169,7 +401,12 @@ class _Handler(BaseHTTPRequestHandler):
                 "version": version,
                 "envelope": envelope,
                 "scanning": scanning,
+                "system": _state.snapshot_system(),
             }, ensure_ascii=False).encode("utf-8")
+            self._send(200, "application/json", body)
+        elif url.path == "/system.json":
+            # Cheap poll for the SYSTEM panel — no envelope round-trip.
+            body = json.dumps(_state.snapshot_system(), ensure_ascii=False).encode("utf-8")
             self._send(200, "application/json", body)
         else:
             self._send(404, "text/plain", b"not found")
@@ -251,8 +488,43 @@ h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
   background: var(--bg); color: var(--fg); border-radius: 3px; min-width: 20ch; }
 .count { color: var(--muted); font-size: 0.85rem; margin-left: auto; }
 
+/* Trace bar — appears when the user starts a route trace. */
+.trace-bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0.75rem;
+  background: color-mix(in srgb, var(--live) 8%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--live) 35%, var(--border));
+  border-radius: 4px; font-size: 0.82rem; font-family: ui-monospace, monospace;
+  animation: traceBarIn 220ms ease-out; }
+.trace-bar[hidden] { display: none; }
+.trace-bar .k { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em;
+  font-size: 0.68rem; font-family: system-ui, -apple-system, sans-serif; }
+.trace-bar code { background: transparent; color: var(--fg); font-weight: 600; }
+.trace-bar .hits { color: var(--muted); }
+.trace-bar .close { margin-left: auto; border: 1px solid var(--border); background: var(--bg);
+  color: var(--fg); cursor: pointer; padding: 0.15rem 0.55rem; border-radius: 3px;
+  font: inherit; font-size: 0.72rem; }
+.trace-bar .close:hover { background: var(--stripe); }
+@keyframes traceBarIn { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+
+/* Trace-src elements — inline click targets. */
+.trace-src { cursor: pointer; border-bottom: 1px dotted transparent; transition: border-color 120ms, color 120ms; }
+.trace-src:hover { border-bottom-color: var(--live); color: var(--fg); }
+
+/* Trace-active states. Dim non-matches, keep matches vivid. */
+tr.finding.dim { opacity: 0.22; }
+tr.finding.trace-hit { background: color-mix(in srgb, var(--live) 6%, transparent); }
+tr.finding.trace-hit td.loc { box-shadow: inset 3px 0 0 var(--live); }
+.chart-row.dim { opacity: 0.22; }
+.chart-row.trace-hit .bar { outline: 2px solid color-mix(in srgb, var(--live) 55%, transparent); outline-offset: 1px; }
+.chart-row .name { cursor: pointer; }
+.chart-row .name:hover { color: var(--fg); }
+#sys-svg .tim-seg { cursor: pointer; }
+#sys-svg .tim-seg.dim { opacity: 0.25; }
+#sys-svg .tim-seg.trace-hit { filter: drop-shadow(0 0 4px var(--live)); }
+#sys-svg .pip { cursor: pointer; }
+#sys-svg .pip.dim { opacity: 0.15; }
+
 main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  grid-template-rows: minmax(0, 1fr) 180px; gap: 0.5rem; min-height: 0; }
+  grid-template-rows: minmax(0, 1fr) 170px 210px; gap: 0.5rem; min-height: 0; }
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
   display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .panel > h2 { margin: 0; padding: 0.4rem 0.75rem;
@@ -264,6 +536,55 @@ main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
 .risk { grid-column: 1; grid-row: 1; }
 .evidence { grid-column: 2; grid-row: 1 / span 2; }
 .delta { grid-column: 1; grid-row: 2; }
+.system { grid-column: 1 / span 2; grid-row: 3; }
+.system .panel-body { display: grid; grid-template-rows: 26px 1fr; padding: 0; min-height: 0; }
+.sys-stats { display: flex; gap: 1rem; align-items: center; padding: 0 0.9rem;
+  font-family: ui-monospace, monospace; font-size: 0.72rem; color: var(--muted);
+  border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.sys-stats .k { opacity: 0.65; letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.65rem; margin-right: 0.25rem; }
+.sys-stats .v { color: var(--fg); }
+.sys-stats .v.warn { color: var(--warn); font-weight: 600; }
+.sys-stats .thread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  vertical-align: middle; margin-right: 0.3rem; background: var(--live); }
+.sys-stats .thread-dot.amber { background: var(--warn); }
+.sys-stats .thread-dot.red { background: var(--block); }
+.sys-stats .spacer { flex: 1; }
+#sys-svg { width: 100%; height: 100%; display: block; overflow: visible; }
+#sys-svg .label { font: 500 11px system-ui, -apple-system, sans-serif; fill: var(--muted); text-anchor: middle; }
+#sys-svg .label.current { fill: var(--fg); }
+#sys-svg .elapsed { font: 500 11px ui-monospace, monospace; fill: var(--fg); text-anchor: middle; font-variant-numeric: tabular-nums; }
+#sys-svg .node { fill: none; stroke: var(--muted); stroke-width: 2; transition: stroke 200ms, fill 200ms; }
+#sys-svg .node.done { fill: color-mix(in srgb, var(--info) 40%, transparent); stroke: var(--info); }
+#sys-svg .node.current { fill: var(--live); stroke: var(--live); }
+#sys-svg .node.current.stuck { fill: var(--warn); stroke: var(--warn); }
+#sys-svg .node.current.err { stroke: var(--block); stroke-width: 2.5; }
+#sys-svg .connector { stroke: var(--muted); stroke-width: 2; transition: stroke 240ms; }
+#sys-svg .connector.done { stroke: var(--info); }
+#sys-svg .ring { fill: none; stroke: var(--live); stroke-width: 2; transform-origin: center; transform: rotate(-90deg); transition: stroke-dashoffset 500ms linear; }
+#sys-svg .pulse { fill: var(--live); opacity: 0.35; animation: sysPulse 1600ms ease-out infinite; }
+#sys-svg .pulse.stuck { fill: var(--warn); animation-duration: 2600ms; }
+@keyframes sysPulse {
+  0%   { r: 22; opacity: 0.5; }
+  100% { r: 34; opacity: 0; }
+}
+#sys-svg .pip { fill: color-mix(in srgb, var(--muted) 40%, transparent); transition: fill 180ms, r 180ms; }
+#sys-svg .pip.done { fill: var(--info); }
+#sys-svg .pip.active { fill: var(--live); r: 4.5; }
+#sys-svg .tim-seg { transition: opacity 220ms; }
+#sys-svg .tim-seg.err { stroke: var(--block); stroke-width: 2; }
+#sys-svg .tim-hdr { font: 500 10px ui-monospace, monospace; fill: var(--muted); font-variant-numeric: tabular-nums; }
+#sys-svg .tim-label { font: 500 9px ui-monospace, monospace; fill: var(--muted); text-anchor: middle; }
+#sys-svg .tim-empty { font: 500 11px system-ui, -apple-system, sans-serif; font-style: italic; fill: var(--muted); text-anchor: middle; }
+#sys-svg .strip-in { animation: stripIn 280ms ease-out; }
+@keyframes stripIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes errorFlash {
+  0%, 100% { stroke: var(--block); } 50% { stroke: transparent; }
+}
+#sys-svg .flash { animation: errorFlash 600ms ease-in-out 2; }
+@media (prefers-reduced-motion: reduce) {
+  #sys-svg .pulse, #sys-svg .strip-in, #sys-svg .flash { animation: none; }
+  #sys-svg .ring { transition: none; }
+}
 .evidence-empty { padding: 1.5rem; color: var(--muted); font-size: 0.85rem; text-align: center; }
 
 table { width: 100%; border-collapse: collapse; }
@@ -348,43 +669,53 @@ tr.finding:hover { background: var(--stripe); }
 
 <header>
   <h1>cockpit</h1>
-  <span class="repo" id="repo">connecting…</span>
+  <span class="repo" id="repo" data-t="connecting">connecting…</span>
   <div class="summary" id="summary"></div>
-  <span class="live"><span class="dot" id="dot"></span><span id="livetext">live</span></span>
+  <span class="live"><span class="dot" id="dot"></span><span id="livetext" data-t="live">live</span></span>
+  <span class="seg" id="lang-mode" role="group" aria-label="language" style="margin-left:auto;">
+    <button data-lang="en">EN</button>
+    <button data-lang="ko">KO</button>
+  </span>
 </header>
 
+<div class="trace-bar" id="trace-bar" hidden>
+  <span class="k" data-t="tracing">tracing</span>
+  <span id="trace-desc"></span>
+  <button class="close" id="trace-close" data-t="trace_clear" title="Esc">clear</button>
+</div>
+
 <div class="filters">
-  <label><input type="checkbox" id="f-block" checked> block <kbd>1</kbd></label>
-  <label><input type="checkbox" id="f-warn" checked> warn <kbd>2</kbd></label>
-  <label><input type="checkbox" id="f-info"> info <kbd>3</kbd></label>
+  <label><input type="checkbox" id="f-block" checked> <span data-t="block">block</span> <kbd>1</kbd></label>
+  <label><input type="checkbox" id="f-warn" checked> <span data-t="warn">warn</span> <kbd>2</kbd></label>
+  <label><input type="checkbox" id="f-info"> <span data-t="info">info</span> <kbd>3</kbd></label>
   <span class="seg" id="baseline-mode" role="group" aria-label="baseline filter">
-    <button data-mode="new" class="active" title="hide baselined findings (press N)">new only</button>
-    <button data-mode="all" title="show every finding">all</button>
-    <button data-mode="baselined" title="show only baselined findings">baselined</button>
+    <button data-mode="new" class="active" data-t="mode_new" data-t-title="mode_new_title">new only</button>
+    <button data-mode="all" data-t="mode_all" data-t-title="mode_all_title">all</button>
+    <button data-mode="baselined" data-t="mode_baselined" data-t-title="mode_baselined_title">baselined</button>
   </span>
-  <input type="text" id="q" placeholder="filter by file, analyzer, symbol…  /">
+  <input type="text" id="q" data-t-placeholder="search" placeholder="filter by file, analyzer, symbol…  /">
   <span class="count" id="count"></span>
-  <button id="help-btn" title="show keyboard shortcuts" style="border:1px solid var(--border);background:var(--bg);color:var(--muted);border-radius:3px;padding:0.15rem 0.5rem;cursor:pointer;font:inherit;font-size:0.85rem;">?</button>
+  <button id="help-btn" data-t-title="help_btn" style="border:1px solid var(--border);background:var(--bg);color:var(--muted);border-radius:3px;padding:0.15rem 0.5rem;cursor:pointer;font:inherit;font-size:0.85rem;">?</button>
 </div>
 
 <div class="help-overlay" id="help" hidden>
   <div class="help-card">
-    <h2>keyboard</h2>
+    <h2 data-t="help_h">keyboard</h2>
     <table>
-      <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>next / previous finding</td></tr>
-      <tr><td><kbd>Enter</kbd></td><td>expand selected finding</td></tr>
-      <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>toggle block / warn / info</td></tr>
-      <tr><td><kbd>n</kbd></td><td>cycle: new only → all → baselined</td></tr>
-      <tr><td><kbd>/</kbd></td><td>focus search</td></tr>
-      <tr><td><kbd>Esc</kbd></td><td>blur search / close this</td></tr>
-      <tr><td><kbd>?</kbd></td><td>toggle this overlay</td></tr>
+      <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td data-t="help_jk">next / previous finding</td></tr>
+      <tr><td><kbd>Enter</kbd></td><td data-t="help_enter">expand selected finding</td></tr>
+      <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td data-t="help_123">toggle block / warn / info</td></tr>
+      <tr><td><kbd>n</kbd></td><td data-t="help_n">cycle: new only → all → baselined</td></tr>
+      <tr><td><kbd>/</kbd></td><td data-t="help_slash">focus search</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td data-t="help_esc">blur search / close this</td></tr>
+      <tr><td><kbd>?</kbd></td><td data-t="help_q">toggle this overlay</td></tr>
     </table>
   </div>
 </div>
 
 <main>
   <section class="panel risk">
-    <h2>Risk <span class="killer">★</span> <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">findings · j / k to navigate</span></h2>
+    <h2><span data-t="risk_title">Risk</span> <span class="killer">★</span> <span data-t="risk_hint" style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">findings · j / k to navigate</span></h2>
     <div class="panel-body">
       <table>
         <thead>
@@ -397,22 +728,29 @@ tr.finding:hover { background: var(--stripe); }
         </thead>
         <tbody id="rows"></tbody>
       </table>
-      <div id="empty" class="empty" hidden>No findings match the current filters.</div>
+      <div id="empty" class="empty" hidden data-t="no_findings_match">No findings match the current filters.</div>
     </div>
   </section>
 
   <section class="panel evidence">
-    <h2>Evidence</h2>
-    <div class="panel-body" id="evidence-body">
-      <div class="evidence-empty">Select a finding — press <kbd>j</kbd> or click a row.</div>
-    </div>
+    <h2 data-t="evidence_title">Evidence</h2>
+    <div class="panel-body" id="evidence-body"></div>
   </section>
 
   <section class="panel delta">
-    <h2>Delta · analyzer counts <span style="margin-left:auto;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">& recent scans</span></h2>
+    <h2><span data-t="delta_title">Delta · analyzer counts</span> <span data-t="delta_hint" style="margin-left:auto;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">& recent scans</span></h2>
     <div class="panel-body" style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
       <div id="chart" style="border-right:1px solid var(--border);overflow:auto;"></div>
       <div id="activity" class="activity"></div>
+    </div>
+  </section>
+
+  <section class="panel system">
+    <h2><span data-t="system_title">System · pipeline</span>
+      <span data-t="system_hint" style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">state machine · analyzer timings</span></h2>
+    <div class="panel-body">
+      <div class="sys-stats" id="sys-stats"></div>
+      <svg id="sys-svg" viewBox="0 0 1600 156" preserveAspectRatio="xMidYMid meet" aria-label="pipeline visualization"></svg>
     </div>
   </section>
 </main>
@@ -420,38 +758,119 @@ tr.finding:hover { background: var(--stripe); }
 <script>
 const SEV_ORDER = { block: 0, warn: 1, info: 2 };
 const BASELINE_MODES = ["new", "all", "baselined"];
+const STRINGS = __STRINGS_JSON__;
 let version = -1;
 let findings = [];
 let prevIds = new Set();
 let baselineMode = "new";
 let selectedIdx = -1;
 let modeAutoPicked = false;  // first envelope sets initial mode based on has_baseline
+let lang = "en";
+let trace = null;   // {kind: "analyzer"|"file", value: "..."} — inspired by Archify
+
+function matchesTrace(kind, value) {
+  if (!trace) return true;
+  if (trace.kind === "analyzer" && kind === "analyzer") return value === trace.value;
+  if (trace.kind === "file" && kind === "file") return value === trace.value;
+  return false;
+}
+function findingMatchesTrace(f) {
+  if (!trace) return true;
+  if (trace.kind === "analyzer") return f.analyzer_id === trace.value;
+  if (trace.kind === "file") return f.file === trace.value;
+  return false;
+}
+function setTrace(kind, value) {
+  if (!kind || !value) return;
+  if (trace && trace.kind === kind && trace.value === value) { clearTrace(); return; }
+  trace = { kind, value };
+  applyFilter();
+  renderTraceBar();
+  // Re-render chart + system so dim states appear.
+  const env = window.__lastEnvelope;
+  if (env) renderChart(env.analyzer_counts || []);
+  if (env && window.__lastSys) renderSystem(window.__lastSys, env.timings, env.errors);
+}
+function clearTrace() {
+  if (!trace) return;
+  trace = null;
+  applyFilter();
+  renderTraceBar();
+  const env = window.__lastEnvelope;
+  if (env) renderChart(env.analyzer_counts || []);
+  if (env && window.__lastSys) renderSystem(window.__lastSys, env.timings, env.errors);
+}
+function renderTraceBar() {
+  const bar = document.getElementById("trace-bar");
+  if (!trace) { bar.hidden = true; return; }
+  bar.hidden = false;
+  const hits = findings.filter(findingMatchesTrace).length;
+  const kindLabel = t("trace_kind_" + trace.kind);
+  document.getElementById("trace-desc").innerHTML =
+    `${esc(kindLabel)} = <code>${esc(trace.value)}</code> <span class="hits">· ${hits} ${t("trace_hits")}</span>`;
+}
+// Delegated trace clicks — any element with data-trace-kind + data-trace-value.
+document.addEventListener("click", (e) => {
+  const src = e.target.closest("[data-trace-kind]");
+  if (!src) return;
+  const kind = src.dataset.traceKind;
+  const value = src.dataset.traceValue;
+  if (!kind || value === undefined) return;
+  e.stopPropagation();
+  setTrace(kind, value);
+});
+document.getElementById("trace-close").addEventListener("click", clearTrace);
+
+function t(key) {
+  return (STRINGS[lang] && STRINGS[lang][key]) || STRINGS.en[key] || key;
+}
+
+function applyLang(next) {
+  lang = STRINGS[next] ? next : "en";
+  try { localStorage.setItem("cockpit.lang", lang); } catch {}
+  document.documentElement.lang = lang;
+  document.querySelectorAll("#lang-mode button").forEach(b =>
+    b.classList.toggle("active", b.dataset.lang === lang));
+  for (const el of document.querySelectorAll("[data-t]")) {
+    const v = t(el.dataset.t);
+    if (el.dataset.t.endsWith("_html")) el.innerHTML = v;
+    else el.textContent = v;
+  }
+  for (const el of document.querySelectorAll("[data-t-title]"))
+    el.title = t(el.dataset.tTitle);
+  for (const el of document.querySelectorAll("[data-t-placeholder]"))
+    el.placeholder = t(el.dataset.tPlaceholder);
+  // Dynamic re-renders that were built pre-switch.
+  if (findings.length) {
+    applyFilter();
+    if (selectedIdx >= 0 && selectedIdx < findings.length) renderEvidence(findings[selectedIdx]);
+    else renderEvidence(null);
+    // Refresh activity + summary counters (they read t() at render time).
+    const env = window.__lastEnvelope;
+    if (env) { renderActivity(env.activity || []); renderSummary(env.summary); }
+  }
+}
+
+document.querySelectorAll("#lang-mode button").forEach(btn =>
+  btn.addEventListener("click", () => applyLang(btn.dataset.lang)));
+
+try {
+  const stored = localStorage.getItem("cockpit.lang");
+  if (stored && STRINGS[stored]) lang = stored;
+  else if ((navigator.language || "").toLowerCase().startsWith("ko")) lang = "ko";
+} catch {}
+applyLang(lang);
 
 function esc(s) { return String(s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
 
 function render(envelope, freshIds) {
-  // First envelope only: if no baseline exists, "new only" would show
-  // an empty screen on repos this tool has never touched. Flip to "all"
-  // once, then let the user pick.
+  window.__lastEnvelope = envelope;
   if (!modeAutoPicked) {
     modeAutoPicked = true;
     if (envelope.has_baseline === false) setBaselineMode("all");
   }
   document.getElementById("repo").textContent = envelope.repo;
-  const s = envelope.summary;
-  const sumEl = document.getElementById("summary");
-  sumEl.innerHTML = "";
-  for (const sev of ["block", "warn", "info"]) {
-    const n = s[sev] || 0;
-    const span = document.createElement("span");
-    span.className = "n-" + (n === 0 ? "zero" : sev);
-    span.textContent = `${sev} ${n}`;
-    sumEl.appendChild(span);
-  }
-  const files = document.createElement("span");
-  files.className = "n-zero";
-  files.textContent = `· ${s.files_scanned} files`;
-  sumEl.appendChild(files);
+  renderSummary(envelope.summary);
 
   findings = [...envelope.findings].sort((a, b) =>
     (SEV_ORDER[a.severity] - SEV_ORDER[b.severity]) ||
@@ -467,9 +886,9 @@ function render(envelope, freshIds) {
       + (f.baselined ? " baselined" : "");
     tr.dataset.i = i;
     tr.innerHTML = `
-      <td><span class="sev ${f.severity}">${f.severity}</span></td>
-      <td class="loc">${esc(f.file)}:${f.span[0]}${f.symbol ? " · " + esc(f.symbol) : ""}</td>
-      <td class="ana">${esc(f.analyzer_id)}<br><span style="opacity:0.6">v${esc(f.analyzer_version)}</span></td>
+      <td><span class="sev ${f.severity}">${t(f.severity)}</span></td>
+      <td class="loc"><span class="trace-src" data-trace-kind="file" data-trace-value="${esc(f.file)}">${esc(f.file)}</span>:${f.span[0]}${f.symbol ? " · " + esc(f.symbol) : ""}</td>
+      <td class="ana"><span class="trace-src" data-trace-kind="analyzer" data-trace-value="${esc(f.analyzer_id)}">${esc(f.analyzer_id)}</span><br><span style="opacity:0.6">v${esc(f.analyzer_version)}</span></td>
       <td>${esc(f.message)}</td>`;
     rowsEl.appendChild(tr);
     tr.addEventListener("click", () => select(i));
@@ -477,6 +896,7 @@ function render(envelope, freshIds) {
   renderChart(envelope.analyzer_counts || []);
   renderActivity(envelope.activity || []);
   applyFilter();
+  renderTraceBar();
   if (selectedIdx >= 0 && selectedIdx < findings.length) {
     renderEvidence(findings[selectedIdx]);
   } else {
@@ -484,39 +904,58 @@ function render(envelope, freshIds) {
   }
 }
 
+function renderSummary(s) {
+  const sumEl = document.getElementById("summary");
+  sumEl.innerHTML = "";
+  for (const sev of ["block", "warn", "info"]) {
+    const n = s[sev] || 0;
+    const span = document.createElement("span");
+    span.className = "n-" + (n === 0 ? "zero" : sev);
+    span.textContent = `${t(sev)} ${n}`;
+    sumEl.appendChild(span);
+  }
+  const files = document.createElement("span");
+  files.className = "n-zero";
+  files.textContent = `· ${s.files_scanned} ${t("files")}`;
+  sumEl.appendChild(files);
+}
+
 function renderEvidence(f) {
   const body = document.getElementById("evidence-body");
   if (!f) {
-    body.innerHTML = '<div class="evidence-empty">Select a finding — press <kbd>j</kbd> or click a row.</div>';
+    body.innerHTML = `<div class="evidence-empty">${t("evidence_empty_html")}</div>`;
     return;
   }
   const evJson = JSON.stringify(f.evidence, null, 2);
   const snippet = (f.evidence && (f.evidence.snippet || f.evidence.text)) || evJson;
   const matches = (f.evidence && Array.isArray(f.evidence.matches)) ? f.evidence.matches : [];
   const matchesHtml = matches.length
-    ? `<section><h3>Matches (${matches.length})</h3><div class="matches">`
+    ? `<section><h3>${t("matches")} (${matches.length})</h3><div class="matches">`
         + matches.map(m => `<a>${esc(m.file || "")}:${m.span ? m.span[0] : ""}</a>`).join("")
         + `</div></section>`
     : "";
+  const rationale = lang === "ko" && f.rationale_ko ? f.rationale_ko : f.rationale;
   body.innerHTML = `<div class="ev">
-    <div class="loc"><span class="sev ${f.severity}">${f.severity}</span> ${esc(f.file)}:${f.span[0]}${f.symbol ? " · " + esc(f.symbol) : ""}${f.baselined ? ' <span style="color:var(--muted);font-size:0.75rem;">· baseline</span>' : ""}</div>
-    <div class="rule">${esc(f.analyzer_id)} v${esc(f.analyzer_version)}</div>
+    <div class="loc"><span class="sev ${f.severity}">${t(f.severity)}</span> <span class="trace-src" data-trace-kind="file" data-trace-value="${esc(f.file)}">${esc(f.file)}</span>:${f.span[0]}${f.symbol ? " · " + esc(f.symbol) : ""}${f.baselined ? ` <span style="color:var(--muted);font-size:0.75rem;">· ${t("baseline_tag")}</span>` : ""}</div>
+    <div class="rule"><span class="trace-src" data-trace-kind="analyzer" data-trace-value="${esc(f.analyzer_id)}">${esc(f.analyzer_id)}</span> v${esc(f.analyzer_version)}</div>
     <div class="msg">${esc(f.message)}</div>
-    ${f.rationale ? `<section><h3>How this was detected</h3><div style="color:var(--muted);font-size:0.83rem;">${esc(f.rationale)}</div></section>` : ""}
-    <section><h3>Snippet</h3><pre>${esc(snippet)}</pre></section>
+    ${rationale ? `<section><h3>${t("how_detected")}</h3><div style="color:var(--muted);font-size:0.83rem;">${esc(rationale)}</div></section>` : ""}
+    <section><h3>${t("snippet")}</h3><pre>${esc(snippet)}</pre></section>
     ${matchesHtml}
-    <section><h3>Raw evidence</h3><pre>${esc(evJson)}</pre></section>
+    <section><h3>${t("raw_evidence")}</h3><pre>${esc(evJson)}</pre></section>
   </div>`;
 }
 
 function renderChart(rows) {
   const el = document.getElementById("chart");
-  if (!rows.length) { el.innerHTML = '<div class="chart-empty">no findings</div>'; return; }
+  if (!rows.length) { el.innerHTML = `<div class="chart-empty">${t("no_findings")}</div>`; return; }
   const max = Math.max(...rows.map(r => r.total));
   el.innerHTML = rows.map(r => {
     const pct = s => `${(r[s] / max * 100).toFixed(1)}%`;
-    return `<div class="chart-row">
-      <span class="name" title="${esc(r.id)}">${esc(r.id)}</span>
+    const hit = matchesTrace("analyzer", r.id);
+    const cls = trace ? (hit ? "chart-row trace-hit" : "chart-row dim") : "chart-row";
+    return `<div class="${cls}">
+      <span class="name trace-src" data-trace-kind="analyzer" data-trace-value="${esc(r.id)}" title="${esc(r.id)}">${esc(r.id)}</span>
       <span class="bar">
         ${r.block ? `<span class="block" style="width:${pct('block')}"></span>` : ""}
         ${r.warn  ? `<span class="warn"  style="width:${pct('warn')}"></span>`  : ""}
@@ -529,7 +968,7 @@ function renderChart(rows) {
 
 function renderActivity(rows) {
   const el = document.getElementById("activity");
-  if (!rows.length) { el.innerHTML = '<div class="chart-empty">waiting…</div>'; return; }
+  if (!rows.length) { el.innerHTML = `<div class="chart-empty">${t("waiting")}</div>`; return; }
   el.innerHTML = rows.map(a => {
     const parts = [];
     if (a.new) parts.push(`<span class="delta pos">+${a.new}</span>`);
@@ -537,7 +976,7 @@ function renderActivity(rows) {
     const delta = parts.length ? parts.join(" ") : `<span style="opacity:0.5">·</span>`;
     return `<div class="row">
       <span>${esc(a.at)}</span>
-      <span>${a.total} findings · ${a.files} files</span>
+      <span>${a.total} ${t("activity_findings")} · ${a.files} ${t("activity_files")}</span>
       <span>${delta}</span>
     </div>`;
   }).join("");
@@ -560,14 +999,19 @@ function applyFilter() {
     const qOk = !q || tr.textContent.toLowerCase().includes(q);
     const visible = sevOk && bOk && qOk;
     tr.classList.toggle("hidden", !visible);
+    // Trace acts as highlight, not filter — non-matches dim, matches glow.
+    const traceHit = findingMatchesTrace(f);
+    tr.classList.toggle("dim", !!trace && !traceHit);
+    tr.classList.toggle("trace-hit", !!trace && traceHit);
     if (visible) shown++;
   });
-  document.getElementById("count").textContent = `${shown} of ${findings.length}`;
+  document.getElementById("count").textContent = `${shown} ${t("of")} ${findings.length}`;
   document.getElementById("empty").hidden = shown > 0;
   if (selectedIdx >= 0) {
     const cur = document.querySelector(`tr.finding[data-i="${selectedIdx}"]`);
     if (!cur || cur.classList.contains("hidden")) select(nextVisible(-1, +1));
   }
+  renderTraceBar();  // hit-count refreshes with filter changes
 }
 
 function nextVisible(from, dir) {
@@ -612,6 +1056,7 @@ document.addEventListener("keydown", e => {
   const q = document.getElementById("q");
   if (e.key === "Escape") {
     if (!help.hidden) { help.hidden = true; return; }
+    if (trace) { clearTrace(); return; }
     if (document.activeElement === q) { q.blur(); return; }
   }
   if (document.activeElement === q) return;  // typing in search — let it be
@@ -642,6 +1087,161 @@ for (const id of ["f-block", "f-warn", "f-info"]) {
 }
 document.getElementById("q").addEventListener("input", applyFilter);
 
+const SYS_PHASES = ["starting", "idle", "debouncing", "scanning", "emitting"];
+const SYS_NODE_X = [80, 240, 400, 560, 720];
+const SYS_NODE_Y = 60;
+const SYS_NODE_R = 22;
+const SYS_STRIP_X = 820;
+const SYS_STRIP_W = 740;
+let sysLastVersion = -1;
+
+function currentAnalyzerFromEvents(events) {
+  // Latest event of shape "analyze <id>" wins.
+  for (const e of events || []) {
+    if (e.phase === "scanning" && typeof e.detail === "string" && e.detail.startsWith("analyze ")) {
+      return e.detail.slice(8).trim();
+    }
+  }
+  return null;
+}
+
+function renderSystem(sys, envTimings, envErrors) {
+  const phase = sys.phase || "idle";
+  const phaseIdx = Math.max(0, SYS_PHASES.indexOf(phase));
+  const elapsed = sys.phase_elapsed_ms || 0;
+  const stuck = elapsed > 30000;
+  const threads = sys.threads || [];
+  const errIndex = envErrors ? envErrors.index_total || 0 : 0;
+  const errAna = envErrors ? (envErrors.analyzer || []).length : 0;
+
+  // ---- stats header ----
+  const threadClass = errIndex || errAna ? "red" : (threads.length > 8 ? "amber" : "");
+  document.getElementById("sys-stats").innerHTML = `
+    <span><span class="k">${t("sys_version_short")}</span><span class="v">${sys.version}</span></span>
+    <span><span class="k">${t("sys_uptime_short")}</span><span class="v">${sys.uptime_s}s</span></span>
+    <span><span class="k">${t("sys_waiters_short")}</span><span class="v">${sys.waiters}</span></span>
+    <span class="spacer"></span>
+    <span title="${threads.map(x=>x.name+(x.alive?' ●':' ○')).join(' · ')}">
+      <span class="thread-dot ${threadClass}"></span><span class="v">${threads.length}</span> <span class="k">${t("sys_threads_short")}</span>
+    </span>
+    ${errIndex ? `<span><span class="k">${t("sys_idx_err")}</span><span class="v warn">${errIndex}</span></span>` : ""}
+    ${errAna ? `<span><span class="k">${t("sys_ana_err")}</span><span class="v warn">${errAna}</span></span>` : ""}
+  `;
+
+  // ---- SVG: state spine ----
+  const svg = document.getElementById("sys-svg");
+  const parts = [];
+  // Connectors between nodes.
+  for (let i = 0; i < SYS_NODE_X.length - 1; i++) {
+    const cls = i < phaseIdx ? "connector done" : "connector";
+    parts.push(`<line class="${cls}" x1="${SYS_NODE_X[i] + SYS_NODE_R}" y1="${SYS_NODE_Y}" x2="${SYS_NODE_X[i+1] - SYS_NODE_R}" y2="${SYS_NODE_Y}"/>`);
+  }
+  // Nodes.
+  for (let i = 0; i < SYS_NODE_X.length; i++) {
+    const isCurrent = i === phaseIdx;
+    const isDone = i < phaseIdx;
+    const hasErr = isCurrent && phase === "scanning" && errIndex > 0;
+    const cls = ["node"];
+    if (isDone) cls.push("done");
+    if (isCurrent) cls.push("current");
+    if (isCurrent && stuck) cls.push("stuck");
+    if (hasErr) cls.push("err");
+    const x = SYS_NODE_X[i];
+    parts.push(`<circle class="${cls.join(' ')}" cx="${x}" cy="${SYS_NODE_Y}" r="${SYS_NODE_R}"/>`);
+
+    // Pulse ring around current.
+    if (isCurrent) {
+      parts.push(`<circle class="pulse${stuck ? ' stuck' : ''}" cx="${x}" cy="${SYS_NODE_Y}" r="22"/>`);
+      // Progress ring — dashoffset based on (elapsed % 2000) / 2000
+      const circ = 2 * Math.PI * 28;
+      const frac = (elapsed % 2000) / 2000;
+      const off = circ * (1 - frac);
+      parts.push(`<circle class="ring" cx="${x}" cy="${SYS_NODE_Y}" r="28" stroke-dasharray="${circ.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}"/>`);
+    }
+    // Label + elapsed.
+    parts.push(`<text class="label${isCurrent ? ' current' : ''}" x="${x}" y="${SYS_NODE_Y + SYS_NODE_R + 18}">${esc(t("phase_" + SYS_PHASES[i]))}${isCurrent && stuck ? esc(t("phase_stuck_suffix")) : ""}</text>`);
+    if (isCurrent) {
+      const secs = elapsed >= 1000 ? (elapsed / 1000).toFixed(1) + "s" : elapsed + "ms";
+      parts.push(`<text class="elapsed" x="${x}" y="${SYS_NODE_Y + SYS_NODE_R + 34}">${secs}</text>`);
+    }
+  }
+
+  // ---- Analyzer pips under 'scanning' node (index 3, x=560) ----
+  const scanX = SYS_NODE_X[3];
+  const pipY = SYS_NODE_Y + SYS_NODE_R + 48;
+  // Canonical analyzer order: prefer envTimings, else derive from events.
+  let analyzerIds = [];
+  if (envTimings && envTimings.analyzers) {
+    analyzerIds = envTimings.analyzers.map(a => a.id);
+  }
+  const currentAnalyzer = phase === "scanning" ? currentAnalyzerFromEvents(sys.events) : null;
+  if (analyzerIds.length) {
+    const spacing = 12;
+    const startX = scanX - ((analyzerIds.length - 1) * spacing) / 2;
+    let hitCurrent = false;
+    for (let i = 0; i < analyzerIds.length; i++) {
+      const id = analyzerIds[i];
+      let cls = "pip";
+      if (phase === "scanning" && currentAnalyzer) {
+        if (id === currentAnalyzer) { cls += " active"; hitCurrent = true; }
+        else if (!hitCurrent) cls += " done";
+      } else if (phase === "idle" || phase === "emitting") {
+        cls += " done";
+      }
+      if (trace) cls += matchesTrace("analyzer", id) ? "" : " dim";
+      parts.push(`<circle class="${cls}" cx="${startX + i * spacing}" cy="${pipY}" r="3.5" data-trace-kind="analyzer" data-trace-value="${esc(id)}"><title>${esc(id)}</title></circle>`);
+    }
+  }
+
+  // ---- Timing strip (right region) ----
+  const stripFresh = envTimings && sys.version !== sysLastVersion;
+  if (envTimings && envTimings.analyzers && envTimings.analyzers.length) {
+    const total = envTimings.total_ms || 1;
+    const header = `${envTimings.total_ms}ms ${t("sys_timing_total")} · ${envTimings.index_ms}ms ${t("sys_timing_index")} · ${envTimings.changeset_ms}ms ${t("sys_timing_changeset")}`;
+    parts.push(`<text class="tim-hdr" x="${SYS_STRIP_X}" y="26" text-anchor="start">${esc(header)}</text>`);
+    const barY = 44, barH = 28;
+    let cursor = SYS_STRIP_X;
+    const gClass = stripFresh ? "strip-in" : "";
+    parts.push(`<g class="${gClass}">`);
+    for (const a of envTimings.analyzers) {
+      const w = Math.max(2, (a.ms / total) * SYS_STRIP_W);
+      let fill = "var(--info)";
+      if (a.ms >= 200 && a.findings > 0 && a.ms >= 500) fill = "var(--block)";
+      else if (a.ms >= 200) fill = "var(--warn)";
+      else if (a.ms >= 50) fill = "var(--live)";
+      const errCls = errAna && a.ms === 0 ? " err" : "";
+      const trClass = trace ? (matchesTrace("analyzer", a.id) ? " trace-hit" : " dim") : "";
+      parts.push(`<rect class="tim-seg${errCls}${trClass}" x="${cursor.toFixed(2)}" y="${barY}" width="${(w - 1).toFixed(2)}" height="${barH}" fill="${fill}" data-trace-kind="analyzer" data-trace-value="${esc(a.id)}"><title>${esc(a.id)} - ${a.ms}ms - ${a.findings} findings</title></rect>`);
+      // Label if segment is wide enough (>=44 viewbox units).
+      if (w >= 44) {
+        const short = a.id.split(".").slice(-1)[0];
+        parts.push(`<text class="tim-label" x="${(cursor + w / 2).toFixed(2)}" y="${barY + barH + 12}">${esc(short)}</text>`);
+      }
+      cursor += w;
+    }
+    parts.push(`</g>`);
+    sysLastVersion = sys.version;
+  } else {
+    parts.push(`<text class="tim-empty" x="${SYS_STRIP_X + SYS_STRIP_W / 2}" y="72">${esc(t("sys_waiting"))}</text>`);
+  }
+
+  svg.innerHTML = parts.join("");
+}
+
+async function pollSystem() {
+  while (true) {
+    try {
+      const r = await fetch("/system.json");
+      const sys = await r.json();
+      window.__lastSys = sys;
+      const env = window.__lastEnvelope;
+      renderSystem(sys, env ? env.timings : null, env ? env.errors : null);
+    } catch {}
+    await new Promise(r => setTimeout(r, 500));
+  }
+}
+pollSystem();
+
 async function poll() {
   const dot = document.getElementById("dot");
   const label = document.getElementById("livetext");
@@ -651,7 +1251,7 @@ async function poll() {
       const { version: v, envelope, scanning } = await r.json();
       dot.classList.toggle("scanning", scanning);
       dot.classList.remove("stale");
-      label.textContent = scanning ? "scanning…" : "live";
+      label.textContent = scanning ? t("scanning") : t("live");
       if (envelope && v !== version) {
         version = v;
         const newIds = new Set(envelope.findings.map(f => f.id));
@@ -661,7 +1261,7 @@ async function poll() {
       }
     } catch (e) {
       dot.classList.add("stale");
-      label.textContent = "disconnected";
+      label.textContent = t("disconnected");
       await new Promise(r => setTimeout(r, 2000));
     }
   }

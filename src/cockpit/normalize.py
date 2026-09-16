@@ -22,9 +22,18 @@ def hash_file(path: Path) -> str:
 
 
 def normalize_path(repo: Path, path: Path) -> str:
-    """Repo-relative POSIX path, lowercased on case-insensitive filesystems.
-    ponytail: unconditional lowercase — safe on Linux since we own the key space."""
-    rel = path.resolve().relative_to(repo.resolve())
+    """Repo-relative POSIX path.
+
+    Fast path: caller passes an already-resolved repo and a path that is
+    already absolute under it. That's true from `full_scan` on any repo
+    the scanner discovered — `repo / relative_component` produces such a
+    path without stat syscalls. .resolve() is the slow fallback for
+    symlinks or unusual inputs. On Windows the fallback costs ~200µs per
+    call and dominates full_scan on large repos (~300ms on fastapi)."""
+    try:
+        rel = path.relative_to(repo)
+    except ValueError:
+        rel = path.resolve().relative_to(repo.resolve())
     return str(PurePosixPath(*rel.parts))
 
 

@@ -27,6 +27,16 @@ class Analyzer(Protocol):
     def analyze(self, cs: ChangeSet, indices: dict[str, FileIndex]) -> list[Finding]: ...
 
 
+# Analyzers whose findings depend on multiple files (a change in file A
+# can produce/remove/mutate findings in file B). The incremental scanner
+# always re-runs these on a full ChangeSet, not the changed-files subset.
+# Single-file analyzers can safely incrementalize.
+CROSS_FILE = frozenset({
+    "dup.block",                       # windows match across files
+    "test.no-test-for-public-symbol",  # symbol-in-src <-> test-file lookup
+})
+
+
 ANALYZERS: list[Analyzer] = [
     ErrorMasking(),
     DupBlock(),

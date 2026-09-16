@@ -1,7 +1,13 @@
 """Enumerate source files in a repo. `git ls-files` first (free .gitignore),
-os.walk fallback for non-git trees. PLAN §10 first row."""
+os.walk fallback for non-git trees. PLAN §10 first row.
+
+Stateful cache: FileListCache caches the file list per repo. Invalidation
+sentinel = `.git/index` mtime + `.git/HEAD` mtime for git repos, or None
+(always rescan) for non-git repos. Watchers use this to skip the ~150ms
+FS walk when the tracked set hasn't changed."""
 from __future__ import annotations
 import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
@@ -36,8 +42,13 @@ def _walk(repo: Path) -> Iterable[Path]:
 
 
 def scan(repo: Path) -> list[Path]:
-    """Return absolute paths of source files under `repo`."""
-    repo = repo.resolve()
+    """Return absolute paths of source files under `repo`. Uncached one-shot.
+
+    Prefer FileListCache().scan(repo) for repeated calls."""
+    return _scan_uncached(repo.resolve())
+
+
+def _scan_uncached(repo: Path) -> list[Path]:
     candidates = _git_ls(repo)
     if candidates is None:
         candidates = list(_walk(repo))
@@ -53,6 +64,56 @@ def scan(repo: Path) -> list[Path]:
         out.append(p)
     out.sort()  # PLAN §9.4 determinism
     return out
+
+
+def _git_sentinels(repo: Path) -> tuple[tuple[str, float], ...] | None:
+    """(path, mtime) pairs for the sentinels that invalidate the scan cache.
+
+    Sentinel choice: `.git/index` (staged file set), `.git/HEAD` (branch swap).
+    Both change when the tracked set of files can plausibly change under a
+    common workflow: staging a new file, switching branches. Editing an
+    already-tracked file does not touch either, which is exactly what we
+    want — the file list is unchanged, we save the walk. None = not a git
+    repo (no cache)."""
+    gi = repo / ".git" / "index"
+    if not gi.exists():
+        return None
+    sentinels: list[tuple[str, float]] = []
+    for rel in ("index", "HEAD"):
+        p = repo / ".git" / rel
+        try:
+            sentinels.append((rel, p.stat().st_mtime))
+        except OSError:
+            pass
+    return tuple(sentinels)
+
+
+@dataclass
+class FileListCache:
+    """Cache scan() output per repo, invalidated by git sentinels.
+
+    Miss cost: one _scan_uncached() call (~150ms on fastapi).
+    Hit cost: one .git/index stat + one .git/HEAD stat (~5µs each).
+    Non-git repos always miss — no free invalidation signal available."""
+    _cache: dict[Path, tuple[tuple[tuple[str, float], ...], list[Path]]] = field(default_factory=dict)
+
+    def scan(self, repo: Path) -> list[Path]:
+        repo = repo.resolve()
+        sentinels = _git_sentinels(repo)
+        if sentinels is not None:
+            cached = self._cache.get(repo)
+            if cached is not None and cached[0] == sentinels:
+                return cached[1]
+        result = _scan_uncached(repo)
+        if sentinels is not None:
+            self._cache[repo] = (sentinels, result)
+        return result
+
+    def reset(self, repo: Path | None = None) -> None:
+        if repo is None:
+            self._cache.clear()
+        else:
+            self._cache.pop(repo.resolve(), None)
 
 
 def demo() -> None:

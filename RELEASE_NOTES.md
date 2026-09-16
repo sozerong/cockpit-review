@@ -1,18 +1,34 @@
-## cockpit-review 0.1.0
+## cockpit-review 0.2.0
 
-First tagged release of **cockpit** — a local, deterministic code reviewer for Python. Every finding is computed from AST, graph, and hash primitives; there are no LLM calls in the analysis path. The reviewer stays the judge; the tool brings evidence.
+A live dashboard, a machine-readable diff receipt, three new analyzers,
+and a **27× speedup** on the developer save-to-update loop.
 
-### What's inside
+### Highlights
 
-Five analyzers, tuned against a 412-row labeled sample across 10 repositories:
+**Live dashboard — `cockpit serve`.** Watch a repo in a browser. The
+findings list, evidence panel, analyzer chart, and pipeline state
+machine update the moment you save a file. Interactive route tracing
+across every panel — click an analyzer id or file path to highlight
+everywhere it appears. i18n EN / KO. SYSTEM panel is a proper SVG
+visualization designed by an independent design pass.
 
-- `risk.error-masking` v2 — bare / broad `except: pass`. Actionable 50% on labels. **warn**
-- `dup.block` v5 — 5+ line intra-function duplicates, string-dominant windows filtered, widespread clusters collapsed. Actionable 28%. **warn**
-- `test.assertion-free` v2 — **info**
-- `test.always-true-assertion` v1 — **info**
-- `test.no-test-for-public-symbol` v1 — **info**
+**Machine receipt — `cockpit diff <base> <head>`.** Two envelopes go
+in, a typed receipt comes out: added / resolved / moved / stable, split
+by severity, plus per-finding rows. `--format json` (machine contract)
+or `--format markdown` (PR-comment shape). CI now uses it — PR comments
+show "you added N warns, resolved M" instead of a raw dump.
 
-CLI: `cockpit check` (table or `--json` schema-v1 envelope), `cockpit watch` (mtime polling, NDJSON), `cockpit baseline save`, and `cockpit report` — a single-file HTML view with severity filter, full-text search, and click-to-expand evidence (no CDN, no bundler).
+**Incremental scan — fastapi 5.8s → 212ms.** Rescan only changed files.
+Per-file caches on FS walk, tree-sitter indices, and per-analyzer
+findings, all invalidated by `.git` sentinels + `id(FileIndex)`
+identity. Measured: **27× warm-scan speedup vs full rescan** on the
+1138-file fastapi tree.
+
+### New analyzers
+
+- `except.reraise-vs-raise` v1 — `raise <alias>` truncates traceback.
+- `arg.mutable-default` v1 — `def f(x=[])`, `x={}`, `x=set()`, `x=list()`.
+- `test.time.sleep` v1 — `time.sleep()` inside a test function.
 
 ### Install
 
@@ -23,27 +39,37 @@ pip install cockpit-review
 ### Quick start
 
 ```bash
-cockpit check                     # analyze current directory
-cockpit check --exit-at warn      # CI gate
-cockpit report --out review.html  # shareable HTML findings view
+cockpit check                        # one-shot scan (CI-friendly)
+cockpit check --exit-at warn         # gate on any new warn
+cockpit serve                        # live browser dashboard, port 8765
+cockpit diff base.json head.json     # PR receipt
+cockpit report --out review.html     # single-file HTML report
 ```
 
 ### Verify
 
 ```bash
-cockpit --version
-cockpit check --json | head
+cockpit --version    # 0.2.0
 ```
 
-### Research
+### Under the hood
 
-Empirical study **Paper C** — 22,758 (repo, commit, file) observations across 1,000 commits show `warn` findings predict *less* subsequent churn (Spearman ρ = −0.44); age is not the confounder. See `bench/paper_c/DRAFT_OUTLINE.md`.
+- 69 pytest tests, cross-platform CI (Linux × macOS × Windows × Python
+  3.11, 3.12).
+- Windows-safe: `cockpit check --json` never crashes on non-ASCII
+  content on legacy consoles; every CLI stdout is forced to UTF-8.
+- All rationale strings translated for the KO dashboard, including the
+  per-analyzer "How this was detected" text.
 
 ### Known limits
 
-- Python only — TypeScript queued behind `dup.block` v6.
-- `test.mocks-target` v1 is shipped disabled: the P0 authenticity pilot tripped the §13.5 stop criterion because the analyzer lacks system-under-test detection; source is retained for follow-up work.
-- The three `test.*` analyzers emit `info` only (below the actionable-precision threshold); `warn` currently comes from `dup.block` and `risk.error-masking`.
-- Self-scan baseline is ~26 findings — committed as `.cockpit/baseline.json` so CI only fails on *new* findings.
+- Python only. TypeScript is queued for M0.5.
+- `test.mocks-target` v1 remains shipped disabled (P0 stop criterion);
+  v2 with SUT detection is queued for a future release.
+- Live dashboard is single-user local for now; hosted mode + GitHub
+  App is the M1.0 target.
 
-Full CI example: `.github/workflows/cockpit.yml`. Tuning history per analyzer: `bench/history/`.
+### Full change list
+
+See [CHANGELOG.md](CHANGELOG.md) for the per-commit detail under the
+`## 0.2.0` heading.

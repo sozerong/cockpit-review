@@ -1,7 +1,160 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-09-16
 
+Live dashboard + machine receipt + a 27× speedup on the developer loop.
+
+**Live dashboard (`cockpit serve`).** Watch a repo in a browser; the
+findings list, evidence panel, analyzer chart, and pipeline state machine
+update the moment you save a file. i18n EN / KO. Interactive route
+tracing across every panel. SYSTEM panel visualization designed by an
+independent design pass (5-node state spine, per-scan analyzer timing
+strip, thread health, all in SVG per a designer spec).
+
+**Machine receipt (`cockpit diff`).** Two schema-1 envelopes go in, a
+typed receipt comes out — added / resolved / moved / stable counts split
+by severity plus per-finding rows. `--format json` or `--format markdown`
+for PR-comment shape. Wired into the CI workflow: PR comments now show
+"you added 3 warns, resolved 5" instead of an ad-hoc filter.
+
+**Incremental scanner — the M0.2 UX goal shipped.**
+`cockpit.incremental.IncrementalScanner` caches per-file indices +
+per-analyzer per-file findings. `FileListCache` caches the FS walk with
+`.git/index` + `.git/HEAD` mtime sentinels. `DupBlock` and
+`NoTestForPublic` add windows-per-file / findings-per-file caches keyed
+by `id(FileIndex)` for O(1) invalidation.
+
+  fastapi (1138 files) — save-to-dashboard-update:
+  - v0.1.0: 5834ms (full scan every time)
+  - v0.2.0: **212ms** (27× speedup)
+
+**Three new analyzers.**
+- `except.reraise-vs-raise` v1 — `raise <alias>` truncates traceback; use
+  bare `raise`.
+- `arg.mutable-default` v1 — `def f(x=[])`, `x={}`, `x=set()`, `x=list()`.
+- `test.time.sleep` v1 — flaky-test signal.
+
+**pytest suite scaffolded.** 69 tests, 4.6s wall. CI matrix
+Linux × macOS × Windows × Python 3.11, 3.12. Gates the self-scan step.
+
+**Windows JSON safety.** `cockpit check --json` uses `ensure_ascii=True`
+and CLI stdout is forced to UTF-8 with `errors=replace` — legacy consoles
+(cp949/cp1252) can't crash the tool on em-dashes or non-ASCII paths.
+
+**cockpit serve --host.** Bind address flag. `0.0.0.0` for LAN or a
+specific Tailscale IP for tailnet-only reach. Default `127.0.0.1`.
+
+**Design canvas.** `design/` — four artboards on a Claude Design canvas:
+Main (findings view), Dashboard (four-panel §7 vision), Retro instrument
+(direction A), Editorial (direction B).
+
+**Docs.** `ROADMAP.md` sets M0.2 → M0.5 → M1.0 milestones with commit
+constraints. `RELEASE.md` + `RELEASE_NOTES.md` for the PyPI + GitHub
+Release paths.
+
+### 0.2.0 — detailed changes
+
+- **perf: `test.no-test-for-public-symbol` per-file cache + O(1) test
+  index** — completes the incremental scan sweep. The analyzer now
+  keeps two caches: normalized test-file source blobs keyed by
+  `id(FileIndex)`, and per-src findings keyed by
+  `(id(src_idx), tuple of id(test_idx))`. Both invalidate on identity
+  drift, so unchanged src + unchanged tests = cache hit and skip the
+  regex search. Also replaces the per-src O(N_paths) name scan with a
+  once-per-scan `_build_test_index` bucketing by basename — O(1) lookup
+  per src. **Analyzer cost on fastapi: 124ms → 3ms** (40× drop).
+  **Total warm scan: 196ms**, hitting the M0.2 sub-200ms goal — 27×
+  cumulative speedup vs original full scan.
+- **perf: FS-walk cache + normalize_path fast path** — completes the
+  third incremental milestone. `FileListCache` in `cockpit.scanner`
+  caches `scan()` output per repo, invalidated by `.git/index` +
+  `.git/HEAD` mtime sentinels. `normalize_path` skips its redundant
+  `.resolve()` calls (which cost ~200µs each on Windows, ~300ms on
+  fastapi at 1138 files). Combined win on fastapi (1138 files):
+  cold **5.8s** (from 12.5s), **warm 1-file edit 380ms** (from 2900ms
+  → 1170ms → **380ms**). Total speedup 7.6× on warm rescan vs the
+  original incremental commit, 17× vs original full scan. Warm scan
+  now dominated by cross-file analyzers (dup.block 80ms +
+  test.no-test-for-public-symbol 114ms = 194ms of 327ms).
+- **perf: dup.block windows-per-file cache** — DupBlock keeps a
+  per-file cache of extracted 5-line windows keyed by
+  `id(FileIndex)`. IncrementalScanner keeps unchanged files' FileIndex
+  objects alive across scans, so identity comparison is a valid change
+  detector. On fastapi (1138 files) dup.block goes from **1913ms →
+  114ms** on a warm rescan — 17× reduction on the analyzer that
+  dominated the previous incremental measurement. Total warm scan is
+  now **1138ms** (2900ms → 1138ms, further 2.6× on top of the previous
+  incremental commit). Remaining warm-scan cost is now the ChangeSet
+  FS-walk (779ms) — next incremental target.
+- **perf: incremental scanner** — `cockpit.incremental.IncrementalScanner`
+  caches per-file indices and per-analyzer per-file findings across scans.
+  On a warm rescan, unchanged files reuse cached indices and cached
+  findings; only re-modified files get reindexed. Cross-file analyzers
+  (dup.block, test.no-test-for-public-symbol — declared via new
+  `analyzers.CROSS_FILE` set) still full-rerun because their findings
+  depend on other files. **Measured on fastapi (1138 files): cold
+  12.5s → warm 2.9s (4.3× speedup)**, driven by single-file analyzers
+  going from ~50ms each to 0ms cache-hit and indexer skipping unchanged
+  files. Remaining cost is dominated by dup.block's cross-file scan
+  (1.9s); a windows-per-file cache is the next step.
+- **serve: incremental integration** — `cockpit serve` `_watch_loop`
+  now warm-scans on every file-change trigger. Envelope carries an
+  `incremental: {mode, reindexed, removed, cached_files}` block; each
+  analyzer timing carries a `cross_file` flag. Cold path (start-up)
+  still runs a full scan.
+- **UI: interactive route tracing** — click an analyzer id or file path
+  anywhere on the dashboard (RISK row, EVIDENCE header, DELTA chart bar,
+  SYSTEM pip, SYSTEM timing segment) to highlight every matching
+  finding + related visualization element across all four panels;
+  non-matches dim to 22% opacity. A trace bar appears at the top with
+  the trace summary and a `clear` button. Esc clears. Clicking the same
+  target twice toggles trace off. Adapted from Archify's route-tracing
+  concept.
+- **`cockpit diff <base> <head>`** — new subcommand. Machine-readable
+  receipt of what changed between two envelopes: `added` / `resolved` /
+  `moved` (same id, new location) / `stable` counts split by severity,
+  plus per-finding rows. `--format json` (machine contract, schema=1)
+  or `--format markdown` (PR-comment shaped, hides info-only). Adapted
+  from Archify's "Architecture Delta / machine receipt" concept —
+  formalises what our baseline-diff view was already implying.
+- **CI: PR comments now use `cockpit diff`** — workflow scans HEAD and
+  the merge base (via a shallow worktree), builds a receipt, comments
+  the markdown format on the PR. Replaces the ad-hoc "current findings
+  minus baseline" summary. Silent on no-meaningful-change.
+- **CLI: force UTF-8 stdout/stderr on Windows** — legacy consoles
+  (cp949/cp1252) can't handle em-dashes or non-ASCII paths in tool
+  output. Now safe by construction.
+- **tests: pytest suite scaffolded** — `tests/` with a shared `make_repo`
+  fixture and 37 initial tests covering the three new analyzers
+  (`except.reraise-vs-raise`, `arg.mutable-default`, `test.time.sleep`),
+  baseline save/load + finding-id stability, and the serve `_State`
+  machine + `_scan` telemetry keys. Runs in 1.7s. 44% line coverage.
+- **CI: pytest matrix** — Linux + macOS + Windows × Python 3.11, 3.12.
+  Runs before the cockpit self-scan gate; both must pass.
+- **docs: ROADMAP.md** — M0.2 (local tool), M0.5 (team tool), M1.0 (SaaS)
+  milestone plan with the constraints the product commits to.
+- **UI: SYSTEM panel visualization (v2)** — text tables replaced with an
+  SVG pipeline spine per designer spec. 5-node state machine
+  (starting → idle → debouncing → scanning → emitting) as horizontal
+  flow with pulse ring + progress ring on the current node, 8 analyzer
+  pips lit sequentially beneath the `scanning` node, proportional
+  timing strip on the right (last-scan analyzer wall times color-coded
+  by threshold), and a compact stats header (version, uptime, waiters,
+  thread health dot). Stuck-state (>30s in a phase), indexer/analyzer
+  errors, and reduced-motion all honored.
+- **UI: SYSTEM panel** — bottom strip in the live dashboard exposes the
+  internals: current pipeline phase (idle / detecting / debouncing /
+  scanning / emitting) with elapsed timer, per-scan per-analyzer wall
+  timings (bar chart), a rolling log of the last 30 state transitions,
+  and a thread list with uptime, state version, long-poll waiter count,
+  and indexer/analyzer error counts.
+- **serve: `/system.json`** — cheap poll (~500ms) for the SYSTEM panel;
+  doesn't touch the envelope long-poll path.
+- **UI: EN / KO i18n** — every dashboard label, filter chip, help
+  overlay row, evidence panel heading, and per-analyzer rationale
+  translated to Korean. Language toggle (EN / KO) in the header;
+  choice persists in `localStorage`. Default picks Korean when the
+  browser's `navigator.language` starts with `ko-`, else English.
 - **`test.time.sleep` v1** — flags `time.sleep(...)` and `sleep(...)`
   (when `from time import sleep`) inside `test_*` functions in test files.
   Flaky-test signal, `warn`. Real-repo pilot on pytest surfaced 4 hits, all
@@ -35,6 +188,8 @@
   across file/analyzer/symbol, click-to-expand evidence. No CDN, no build
   tools, no runtime dependencies beyond a modern browser. PLAN §7 RISK
   panel MVP.
+
+## Unreleased
 
 ## 0.1.0 — 2026-09-11
 

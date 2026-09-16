@@ -1,16 +1,26 @@
-"""cockpit CLI — `check`, `watch`, `baseline`.
+"""cockpit CLI — `check`, `watch`, `baseline`, `report`, `serve`, `diff`.
 
 Contracts:
 - `check --json` emits the schema-1 envelope (PLAN §0 rule 1)
 - `check --exit-code` returns non-zero on any warn (or higher) NEW to the
   baseline. CI target.
 - `baseline save` snapshots current findings so future runs only see new ones.
+- `diff` emits a machine-readable receipt of changes between two envelopes.
 """
 from __future__ import annotations
 import argparse
 import json
 import sys
 from pathlib import Path
+
+# Force UTF-8 stdout so em-dashes, non-ASCII paths, and localized messages
+# don't crash on legacy Windows consoles (cp949/cp1252).
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError):
+        pass
 
 from . import baseline as bl
 from .analyzers import run_all
@@ -132,6 +142,13 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--host", default="127.0.0.1",
                    help="Bind address. Use 0.0.0.0 to expose to LAN/Tailscale (default: 127.0.0.1)")
 
+    d = sub.add_parser("diff", help="Machine-readable diff between two envelopes")
+    d.add_argument("base", type=Path, help="Base envelope JSON (from `cockpit check --json`)")
+    d.add_argument("head", type=Path, help="Head envelope JSON")
+    d.add_argument("--format", choices=["json", "markdown"], default="json",
+                   help="Receipt format. json (default) is the machine contract; "
+                        "markdown is a PR-comment-shaped summary")
+
     args = p.parse_args(argv)
     if args.cmd == "check":
         use_color = sys.stdout.isatty() and not args.no_color
@@ -148,7 +165,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "serve":
         from .serve import cmd_serve
         return cmd_serve(args.repo, port=args.port, host=args.host)
+    if args.cmd == "diff":
+        return cmd_diff(args.base, args.head, args.format)
     return 2
+
+
+def cmd_diff(base_path: Path, head_path: Path, fmt: str) -> int:
+    from . import diff
+    base = json.loads(base_path.read_text(encoding="utf-8"))
+    head = json.loads(head_path.read_text(encoding="utf-8"))
+    receipt = diff.compute_diff(base, head)
+    if fmt == "json":
+        json.dump(receipt, sys.stdout, ensure_ascii=True, indent=2)
+        sys.stdout.write("\n")
+    else:
+        sys.stdout.write(diff.format_markdown(receipt))
+    return 0
 
 
 if __name__ == "__main__":
