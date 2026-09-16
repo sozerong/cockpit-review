@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **UI: interactive route tracing** — click an analyzer id or file path
+  anywhere on the dashboard (RISK row, EVIDENCE header, DELTA chart bar,
+  SYSTEM pip, SYSTEM timing segment) to highlight every matching
+  finding + related visualization element across all four panels;
+  non-matches dim to 22% opacity. A trace bar appears at the top with
+  the trace summary and a `clear` button. Esc clears. Clicking the same
+  target twice toggles trace off. Adapted from Archify's route-tracing
+  concept.
 - **`cockpit diff <base> <head>`** — new subcommand. Machine-readable
   receipt of what changed between two envelopes: `added` / `resolved` /
   `moved` (same id, new location) / `stable` counts split by severity,

@@ -156,6 +156,12 @@ _STRINGS = {
         "sys_timing_index": "index",
         "sys_timing_changeset": "parse",
         "sys_waiting": "waiting for first scan…",
+        "tracing": "tracing",
+        "trace_clear": "clear",
+        "trace_kind_analyzer": "analyzer",
+        "trace_kind_file": "file",
+        "trace_hits": "matches",
+        "trace_hint": "click a location or analyzer id to trace across panels",
     },
     "ko": {
         "connecting": "연결 중…",
@@ -217,6 +223,12 @@ _STRINGS = {
         "sys_timing_index": "인덱스",
         "sys_timing_changeset": "파싱",
         "sys_waiting": "첫 스캔 대기 중…",
+        "tracing": "추적",
+        "trace_clear": "해제",
+        "trace_kind_analyzer": "analyzer",
+        "trace_kind_file": "파일",
+        "trace_hits": "매칭",
+        "trace_hint": "위치나 analyzer id를 클릭하면 여러 패널에 걸쳐 추적됨",
     },
 }
 
@@ -527,6 +539,41 @@ h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
   background: var(--bg); color: var(--fg); border-radius: 3px; min-width: 20ch; }
 .count { color: var(--muted); font-size: 0.85rem; margin-left: auto; }
 
+/* Trace bar — appears when the user starts a route trace. */
+.trace-bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0.75rem;
+  background: color-mix(in srgb, var(--live) 8%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--live) 35%, var(--border));
+  border-radius: 4px; font-size: 0.82rem; font-family: ui-monospace, monospace;
+  animation: traceBarIn 220ms ease-out; }
+.trace-bar[hidden] { display: none; }
+.trace-bar .k { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em;
+  font-size: 0.68rem; font-family: system-ui, -apple-system, sans-serif; }
+.trace-bar code { background: transparent; color: var(--fg); font-weight: 600; }
+.trace-bar .hits { color: var(--muted); }
+.trace-bar .close { margin-left: auto; border: 1px solid var(--border); background: var(--bg);
+  color: var(--fg); cursor: pointer; padding: 0.15rem 0.55rem; border-radius: 3px;
+  font: inherit; font-size: 0.72rem; }
+.trace-bar .close:hover { background: var(--stripe); }
+@keyframes traceBarIn { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+
+/* Trace-src elements — inline click targets. */
+.trace-src { cursor: pointer; border-bottom: 1px dotted transparent; transition: border-color 120ms, color 120ms; }
+.trace-src:hover { border-bottom-color: var(--live); color: var(--fg); }
+
+/* Trace-active states. Dim non-matches, keep matches vivid. */
+tr.finding.dim { opacity: 0.22; }
+tr.finding.trace-hit { background: color-mix(in srgb, var(--live) 6%, transparent); }
+tr.finding.trace-hit td.loc { box-shadow: inset 3px 0 0 var(--live); }
+.chart-row.dim { opacity: 0.22; }
+.chart-row.trace-hit .bar { outline: 2px solid color-mix(in srgb, var(--live) 55%, transparent); outline-offset: 1px; }
+.chart-row .name { cursor: pointer; }
+.chart-row .name:hover { color: var(--fg); }
+#sys-svg .tim-seg { cursor: pointer; }
+#sys-svg .tim-seg.dim { opacity: 0.25; }
+#sys-svg .tim-seg.trace-hit { filter: drop-shadow(0 0 4px var(--live)); }
+#sys-svg .pip { cursor: pointer; }
+#sys-svg .pip.dim { opacity: 0.15; }
+
 main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   grid-template-rows: minmax(0, 1fr) 170px 210px; gap: 0.5rem; min-height: 0; }
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
@@ -682,6 +729,12 @@ tr.finding:hover { background: var(--stripe); }
   </span>
 </header>
 
+<div class="trace-bar" id="trace-bar" hidden>
+  <span class="k" data-t="tracing">tracing</span>
+  <span id="trace-desc"></span>
+  <button class="close" id="trace-close" data-t="trace_clear" title="Esc">clear</button>
+</div>
+
 <div class="filters">
   <label><input type="checkbox" id="f-block" checked> <span data-t="block">block</span> <kbd>1</kbd></label>
   <label><input type="checkbox" id="f-warn" checked> <span data-t="warn">warn</span> <kbd>2</kbd></label>
@@ -764,6 +817,60 @@ let baselineMode = "new";
 let selectedIdx = -1;
 let modeAutoPicked = false;  // first envelope sets initial mode based on has_baseline
 let lang = "en";
+let trace = null;   // {kind: "analyzer"|"file", value: "..."} — inspired by Archify
+
+function matchesTrace(kind, value) {
+  if (!trace) return true;
+  if (trace.kind === "analyzer" && kind === "analyzer") return value === trace.value;
+  if (trace.kind === "file" && kind === "file") return value === trace.value;
+  return false;
+}
+function findingMatchesTrace(f) {
+  if (!trace) return true;
+  if (trace.kind === "analyzer") return f.analyzer_id === trace.value;
+  if (trace.kind === "file") return f.file === trace.value;
+  return false;
+}
+function setTrace(kind, value) {
+  if (!kind || !value) return;
+  if (trace && trace.kind === kind && trace.value === value) { clearTrace(); return; }
+  trace = { kind, value };
+  applyFilter();
+  renderTraceBar();
+  // Re-render chart + system so dim states appear.
+  const env = window.__lastEnvelope;
+  if (env) renderChart(env.analyzer_counts || []);
+  if (env && window.__lastSys) renderSystem(window.__lastSys, env.timings, env.errors);
+}
+function clearTrace() {
+  if (!trace) return;
+  trace = null;
+  applyFilter();
+  renderTraceBar();
+  const env = window.__lastEnvelope;
+  if (env) renderChart(env.analyzer_counts || []);
+  if (env && window.__lastSys) renderSystem(window.__lastSys, env.timings, env.errors);
+}
+function renderTraceBar() {
+  const bar = document.getElementById("trace-bar");
+  if (!trace) { bar.hidden = true; return; }
+  bar.hidden = false;
+  const hits = findings.filter(findingMatchesTrace).length;
+  const kindLabel = t("trace_kind_" + trace.kind);
+  document.getElementById("trace-desc").innerHTML =
+    `${esc(kindLabel)} = <code>${esc(trace.value)}</code> <span class="hits">· ${hits} ${t("trace_hits")}</span>`;
+}
+// Delegated trace clicks — any element with data-trace-kind + data-trace-value.
+document.addEventListener("click", (e) => {
+  const src = e.target.closest("[data-trace-kind]");
+  if (!src) return;
+  const kind = src.dataset.traceKind;
+  const value = src.dataset.traceValue;
+  if (!kind || value === undefined) return;
+  e.stopPropagation();
+  setTrace(kind, value);
+});
+document.getElementById("trace-close").addEventListener("click", clearTrace);
 
 function t(key) {
   return (STRINGS[lang] && STRINGS[lang][key]) || STRINGS.en[key] || key;
@@ -830,9 +937,9 @@ function render(envelope, freshIds) {
       + (f.baselined ? " baselined" : "");
     tr.dataset.i = i;
     tr.innerHTML = `
-      <td><span class="sev ${f.severity}">${f.severity}</span></td>
-      <td class="loc">${esc(f.file)}:${f.span[0]}${f.symbol ? " · " + esc(f.symbol) : ""}</td>
-      <td class="ana">${esc(f.analyzer_id)}<br><span style="opacity:0.6">v${esc(f.analyzer_version)}</span></td>
+      <td><span class="sev ${f.severity}">${t(f.severity)}</span></td>
+      <td class="loc"><span class="trace-src" data-trace-kind="file" data-trace-value="${esc(f.file)}">${esc(f.file)}</span>:${f.span[0]}${f.symbol ? " · " + esc(f.symbol) : ""}</td>
+      <td class="ana"><span class="trace-src" data-trace-kind="analyzer" data-trace-value="${esc(f.analyzer_id)}">${esc(f.analyzer_id)}</span><br><span style="opacity:0.6">v${esc(f.analyzer_version)}</span></td>
       <td>${esc(f.message)}</td>`;
     rowsEl.appendChild(tr);
     tr.addEventListener("click", () => select(i));
@@ -840,6 +947,7 @@ function render(envelope, freshIds) {
   renderChart(envelope.analyzer_counts || []);
   renderActivity(envelope.activity || []);
   applyFilter();
+  renderTraceBar();
   if (selectedIdx >= 0 && selectedIdx < findings.length) {
     renderEvidence(findings[selectedIdx]);
   } else {
@@ -879,8 +987,8 @@ function renderEvidence(f) {
     : "";
   const rationale = lang === "ko" && f.rationale_ko ? f.rationale_ko : f.rationale;
   body.innerHTML = `<div class="ev">
-    <div class="loc"><span class="sev ${f.severity}">${t(f.severity)}</span> ${esc(f.file)}:${f.span[0]}${f.symbol ? " · " + esc(f.symbol) : ""}${f.baselined ? ` <span style="color:var(--muted);font-size:0.75rem;">· ${t("baseline_tag")}</span>` : ""}</div>
-    <div class="rule">${esc(f.analyzer_id)} v${esc(f.analyzer_version)}</div>
+    <div class="loc"><span class="sev ${f.severity}">${t(f.severity)}</span> <span class="trace-src" data-trace-kind="file" data-trace-value="${esc(f.file)}">${esc(f.file)}</span>:${f.span[0]}${f.symbol ? " · " + esc(f.symbol) : ""}${f.baselined ? ` <span style="color:var(--muted);font-size:0.75rem;">· ${t("baseline_tag")}</span>` : ""}</div>
+    <div class="rule"><span class="trace-src" data-trace-kind="analyzer" data-trace-value="${esc(f.analyzer_id)}">${esc(f.analyzer_id)}</span> v${esc(f.analyzer_version)}</div>
     <div class="msg">${esc(f.message)}</div>
     ${rationale ? `<section><h3>${t("how_detected")}</h3><div style="color:var(--muted);font-size:0.83rem;">${esc(rationale)}</div></section>` : ""}
     <section><h3>${t("snippet")}</h3><pre>${esc(snippet)}</pre></section>
@@ -895,8 +1003,10 @@ function renderChart(rows) {
   const max = Math.max(...rows.map(r => r.total));
   el.innerHTML = rows.map(r => {
     const pct = s => `${(r[s] / max * 100).toFixed(1)}%`;
-    return `<div class="chart-row">
-      <span class="name" title="${esc(r.id)}">${esc(r.id)}</span>
+    const hit = matchesTrace("analyzer", r.id);
+    const cls = trace ? (hit ? "chart-row trace-hit" : "chart-row dim") : "chart-row";
+    return `<div class="${cls}">
+      <span class="name trace-src" data-trace-kind="analyzer" data-trace-value="${esc(r.id)}" title="${esc(r.id)}">${esc(r.id)}</span>
       <span class="bar">
         ${r.block ? `<span class="block" style="width:${pct('block')}"></span>` : ""}
         ${r.warn  ? `<span class="warn"  style="width:${pct('warn')}"></span>`  : ""}
@@ -940,6 +1050,10 @@ function applyFilter() {
     const qOk = !q || tr.textContent.toLowerCase().includes(q);
     const visible = sevOk && bOk && qOk;
     tr.classList.toggle("hidden", !visible);
+    // Trace acts as highlight, not filter — non-matches dim, matches glow.
+    const traceHit = findingMatchesTrace(f);
+    tr.classList.toggle("dim", !!trace && !traceHit);
+    tr.classList.toggle("trace-hit", !!trace && traceHit);
     if (visible) shown++;
   });
   document.getElementById("count").textContent = `${shown} ${t("of")} ${findings.length}`;
@@ -948,6 +1062,7 @@ function applyFilter() {
     const cur = document.querySelector(`tr.finding[data-i="${selectedIdx}"]`);
     if (!cur || cur.classList.contains("hidden")) select(nextVisible(-1, +1));
   }
+  renderTraceBar();  // hit-count refreshes with filter changes
 }
 
 function nextVisible(from, dir) {
@@ -992,6 +1107,7 @@ document.addEventListener("keydown", e => {
   const q = document.getElementById("q");
   if (e.key === "Escape") {
     if (!help.hidden) { help.hidden = true; return; }
+    if (trace) { clearTrace(); return; }
     if (document.activeElement === q) { q.blur(); return; }
   }
   if (document.activeElement === q) return;  // typing in search — let it be
@@ -1123,7 +1239,8 @@ function renderSystem(sys, envTimings, envErrors) {
       } else if (phase === "idle" || phase === "emitting") {
         cls += " done";
       }
-      parts.push(`<circle class="${cls}" cx="${startX + i * spacing}" cy="${pipY}" r="3.5"><title>${esc(id)}</title></circle>`);
+      if (trace) cls += matchesTrace("analyzer", id) ? "" : " dim";
+      parts.push(`<circle class="${cls}" cx="${startX + i * spacing}" cy="${pipY}" r="3.5" data-trace-kind="analyzer" data-trace-value="${esc(id)}"><title>${esc(id)}</title></circle>`);
     }
   }
 
@@ -1144,7 +1261,8 @@ function renderSystem(sys, envTimings, envErrors) {
       else if (a.ms >= 200) fill = "var(--warn)";
       else if (a.ms >= 50) fill = "var(--live)";
       const errCls = errAna && a.ms === 0 ? " err" : "";
-      parts.push(`<rect class="tim-seg${errCls}" x="${cursor.toFixed(2)}" y="${barY}" width="${(w - 1).toFixed(2)}" height="${barH}" fill="${fill}"><title>${esc(a.id)} — ${a.ms}ms · ${a.findings} findings</title></rect>`);
+      const trClass = trace ? (matchesTrace("analyzer", a.id) ? " trace-hit" : " dim") : "";
+      parts.push(`<rect class="tim-seg${errCls}${trClass}" x="${cursor.toFixed(2)}" y="${barY}" width="${(w - 1).toFixed(2)}" height="${barH}" fill="${fill}" data-trace-kind="analyzer" data-trace-value="${esc(a.id)}"><title>${esc(a.id)} - ${a.ms}ms - ${a.findings} findings</title></rect>`);
       // Label if segment is wide enough (>=44 viewbox units).
       if (w >= 44) {
         const short = a.id.split(".").slice(-1)[0];
@@ -1166,6 +1284,7 @@ async function pollSystem() {
     try {
       const r = await fetch("/system.json");
       const sys = await r.json();
+      window.__lastSys = sys;
       const env = window.__lastEnvelope;
       renderSystem(sys, env ? env.timings : null, env ? env.errors : null);
     } catch {}
