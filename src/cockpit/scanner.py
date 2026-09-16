@@ -34,6 +34,11 @@ def _git_ls(repo: Path) -> list[Path] | None:
 
 def _walk(repo: Path) -> Iterable[Path]:
     for p in repo.rglob("*"):
+        # Skip symlinks BEFORE is_file() (which follows them). A repo
+        # can otherwise contain `evil.py -> /home/user/.aws/credentials`
+        # that gets ingested and leaks into the served evidence snippet.
+        if p.is_symlink():
+            continue
         if not p.is_file():
             continue
         if any(part in _EXCLUDE_DIRS for part in p.relative_to(repo).parts):
@@ -56,7 +61,12 @@ def _scan_uncached(repo: Path) -> list[Path]:
     for p in candidates:
         if p.suffix not in _SOURCE_EXTS:
             continue
+        # Symlinks in the git-tracked set can still point outside the
+        # repo (`evil.py -> /etc/passwd`); reading them would leak
+        # credentials via the served evidence snippet. Skip.
         try:
+            if p.is_symlink():
+                continue
             if p.stat().st_size > _MAX_BYTES:
                 continue
         except OSError:

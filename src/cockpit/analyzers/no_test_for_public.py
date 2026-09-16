@@ -79,11 +79,11 @@ class NoTestForPublic:
     version = "1"
 
     def __init__(self) -> None:
-        # Per-test-file normalized source blob, keyed by (path, id(FileIndex)).
-        # Reused across scans as long as the test file's index object is
-        # preserved by IncrementalScanner.
+        # Per-test-file normalized source blob, keyed by (path, generation).
+        # See dup_block.py __init__: monotonic generations avoid the
+        # id()-reuse hazard from CPython arena recycling.
         self._test_blob_cache: dict[str, tuple[int, str]] = {}
-        # Per-src-file findings, keyed by (id(src_idx), tuple of id(test_idx)).
+        # Per-src-file findings, keyed by (src_gen, tuple of test_gens).
         # Rebuild if the src file changed OR any of its corresponding test
         # files changed OR the corresponding-test set itself changed
         # (a new test file matched the src's expected name).
@@ -111,12 +111,12 @@ class NoTestForPublic:
                 self._src_cache.pop(fc.path, None)
                 continue
 
-            # Cache key includes every corresponding test file's index
-            # identity so we know when to bust.
-            test_ids = tuple(
-                id(indices[p]) for p in test_paths if p in indices
+            # Cache key includes every corresponding test file's generation
+            # so we know when to bust.
+            test_gens = tuple(
+                indices[p].generation for p in test_paths if p in indices
             )
-            cache_key = (id(src_idx), test_ids)
+            cache_key = (src_idx.generation, test_gens)
             cached = self._src_cache.get(fc.path)
             if cached is not None and (cached[0], cached[1]) == cache_key:
                 out.extend(cached[2])
@@ -125,7 +125,7 @@ class NoTestForPublic:
 
             publics = _public_top_level(src_idx)
             if not publics:
-                self._src_cache[fc.path] = (id(src_idx), test_ids, [])
+                self._src_cache[fc.path] = (src_idx.generation, test_gens, [])
                 continue
 
             test_blob = self._test_blob(cs, indices, test_paths)
@@ -140,7 +140,7 @@ class NoTestForPublic:
                         message=f"public `{name}` never referenced in {test_paths[0]}",
                         evidence={"test_files": test_paths},
                     ))
-            self._src_cache[fc.path] = (id(src_idx), test_ids, findings)
+            self._src_cache[fc.path] = (src_idx.generation, test_gens, findings)
             out.extend(findings)
 
         # Prune caches: files no longer present or no longer relevant fall out.
@@ -164,7 +164,7 @@ class NoTestForPublic:
             if test_idx is None:
                 continue
             cached = self._test_blob_cache.get(p)
-            if cached is not None and cached[0] == id(test_idx):
+            if cached is not None and cached[0] == test_idx.generation:
                 parts.append(cached[1])
                 continue
             abs_p = by_rel.get(p)
@@ -174,7 +174,7 @@ class NoTestForPublic:
                 text = normalize_bytes(abs_p.read_bytes()).decode("utf-8", "replace") + "\n"
             except Exception:
                 text = ""
-            self._test_blob_cache[p] = (id(test_idx), text)
+            self._test_blob_cache[p] = (test_idx.generation, text)
             parts.append(text)
         return "".join(parts)
 

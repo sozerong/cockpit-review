@@ -36,12 +36,28 @@ def save(repo: Path, findings: Iterable[Finding]) -> Path:
 
 
 def load(repo: Path) -> set[str] | None:
-    """Return the set of baselined ids, or None if no baseline exists."""
+    """Return the set of baselined ids, or None if no baseline exists
+    or the file is corrupt. Corrupt-file mode logs to stderr and
+    returns None — a valid "no baseline" answer that keeps the watch
+    thread alive. A prior version raised JSONDecodeError which killed
+    `cockpit serve`'s daemon thread and stuck the dashboard on the
+    last envelope forever."""
+    import sys
     p = path(repo)
     if not p.exists():
         return None
-    data = json.loads(p.read_text(encoding="utf-8"))
-    return set(data.get("ids", []))
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
+        print(f"cockpit: baseline at {p} is unreadable ({e}); "
+              f"treating as absent", file=sys.stderr)
+        return None
+    if not isinstance(data, dict):
+        return None
+    ids = data.get("ids")
+    if not isinstance(ids, list):
+        return None
+    return set(str(x) for x in ids)
 
 
 def demo() -> None:

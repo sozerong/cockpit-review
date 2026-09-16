@@ -107,7 +107,7 @@ tr.finding.expanded .chev::before { transform: rotate(90deg); }
 const ENVELOPE = __ENVELOPE_JSON__;
 const SEV_ORDER = { block: 0, warn: 1, info: 2 };
 
-function esc(s) { return String(s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
 document.getElementById("repo").textContent = ENVELOPE.repo;
 document.getElementById("generated").textContent = ENVELOPE.generated_at;

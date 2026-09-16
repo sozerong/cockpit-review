@@ -1,6 +1,6 @@
 [project]
 name = "cockpit-review"
-version = "0.2.0"
+version = "0.2.1"
 description = "Deterministic verification cockpit for AI-generated code — no LLM in the analysis path"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,8 +20,11 @@ classifiers = [
     "Topic :: Software Development :: Testing",
 ]
 dependencies = [
-    "tree-sitter>=0.23",
-    "tree-sitter-python>=0.23",
+    # Upper bounds hold in known-tested range. tree-sitter ships native
+    # code — an unpinned major bump becomes a silent supply-chain risk
+    # at `pip install`. Bump these deliberately when we test a new release.
+    "tree-sitter>=0.23,<0.30",
+    "tree-sitter-python>=0.23,<0.30",
 ]
 
 [project.optional-dependencies]
