@@ -21,10 +21,7 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
 from . import baseline as bl
-from .analyzers import ANALYZERS
-from .changeset import full_scan
-from .finding import to_json
-from .indexer import index_file
+from .incremental import IncrementalScanner
 from .watch import _snapshot, POLL_INTERVAL, DEBOUNCE
 
 
@@ -331,49 +328,13 @@ def _counts_by_analyzer(findings: list[dict]) -> list[dict]:
     return out
 
 
-def _scan(repo: Path) -> dict:
-    """Analyzer pipeline instrumented for the SYSTEM panel.
+_scanner = IncrementalScanner()
 
-    Records per-stage wall time (changeset, indexing, each analyzer) and
-    indexer errors, then packages the envelope with baseline + rationale
-    annotations. All stage transitions are pushed into _state.events so
-    the UI can render the pipeline as it runs."""
-    t0 = time.perf_counter()
-    _state.set_phase("scanning", "full_scan")
-    cs = full_scan(repo)
-    t_cs = time.perf_counter()
 
-    _state.set_phase("scanning", f"indexing {len(cs.files)} files")
-    indices, index_errors = {}, []
-    for fc in cs.files:
-        try:
-            indices[fc.path] = index_file(fc.path, fc.absolute)
-        except Exception as e:
-            index_errors.append({"file": fc.path, "kind": type(e).__name__,
-                                 "message": str(e)[:200]})
-    t_idx = time.perf_counter()
+def _scan(repo: Path, force_full: bool = False) -> dict:
+    """Wrap incremental scan with baseline + rationale annotations."""
+    env = _scanner.scan(repo, force_full=force_full, set_phase=_state.set_phase)
 
-    analyzer_timings, analyzer_errors, all_findings = [], [], []
-    for a in ANALYZERS:
-        _state.set_phase("scanning", f"analyze {a.id}")
-        ta = time.perf_counter()
-        try:
-            fs = a.analyze(cs, indices)
-            all_findings.extend(fs)
-        except Exception as e:
-            fs = []
-            analyzer_errors.append({"analyzer": a.id, "kind": type(e).__name__,
-                                    "message": str(e)[:200]})
-        analyzer_timings.append({"id": a.id, "ms": round((time.perf_counter() - ta) * 1000),
-                                 "findings": len(fs)})
-
-    _state.set_phase("emitting")
-    env = to_json(
-        repo=str(repo.resolve()),
-        scope={"kind": "full", "base": None, "head": "working"},
-        findings=all_findings,
-        files_scanned=len(indices),
-    )
     baselined = bl.load(repo)
     env["has_baseline"] = baselined is not None
     baselined = baselined or set()
@@ -384,25 +345,13 @@ def _scan(repo: Path) -> dict:
         f["rationale_ko"] = _RATIONALES["ko"].get(aid, "")
     env["summary"]["baselined"] = sum(1 for f in env["findings"] if f["baselined"])
     env["summary"]["new"] = len(env["findings"]) - env["summary"]["baselined"]
-
-    env["timings"] = {
-        "total_ms": round((time.perf_counter() - t0) * 1000),
-        "changeset_ms": round((t_cs - t0) * 1000),
-        "index_ms": round((t_idx - t_cs) * 1000),
-        "analyzers": analyzer_timings,
-    }
-    env["errors"] = {
-        "index": index_errors[:20],       # cap so a broken repo can't flood
-        "analyzer": analyzer_errors,
-        "index_total": len(index_errors),
-    }
     return env
 
 
 def _watch_loop(repo: Path) -> None:
     _state.set_phase("scanning", "cold start")
     _state.set_scanning(True)
-    _state.set(_scan(repo))
+    _state.set(_scan(repo, force_full=True))
     _state.set_scanning(False)
     _state.set_phase("idle")
 
@@ -420,7 +369,7 @@ def _watch_loop(repo: Path) -> None:
         elif last_change_at is not None and \
                 time.monotonic() - last_change_at >= DEBOUNCE:
             _state.set_scanning(True)
-            _state.set(_scan(repo))
+            _state.set(_scan(repo))    # incremental — scanner detects delta from cache
             _state.set_scanning(False)
             _state.set_phase("idle")
             last_change_at = None

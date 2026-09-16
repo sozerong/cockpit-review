@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **perf: incremental scanner** — `cockpit.incremental.IncrementalScanner`
+  caches per-file indices and per-analyzer per-file findings across scans.
+  On a warm rescan, unchanged files reuse cached indices and cached
+  findings; only re-modified files get reindexed. Cross-file analyzers
+  (dup.block, test.no-test-for-public-symbol — declared via new
+  `analyzers.CROSS_FILE` set) still full-rerun because their findings
+  depend on other files. **Measured on fastapi (1138 files): cold
+  12.5s → warm 2.9s (4.3× speedup)**, driven by single-file analyzers
+  going from ~50ms each to 0ms cache-hit and indexer skipping unchanged
+  files. Remaining cost is dominated by dup.block's cross-file scan
+  (1.9s); a windows-per-file cache is the next step.
+- **serve: incremental integration** — `cockpit serve` `_watch_loop`
+  now warm-scans on every file-change trigger. Envelope carries an
+  `incremental: {mode, reindexed, removed, cached_files}` block; each
+  analyzer timing carries a `cross_file` flag. Cold path (start-up)
+  still runs a full scan.
 - **UI: interactive route tracing** — click an analyzer id or file path
   anywhere on the dashboard (RISK row, EVIDENCE header, DELTA chart bar,
   SYSTEM pip, SYSTEM timing segment) to highlight every matching
