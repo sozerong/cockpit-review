@@ -31,7 +31,11 @@ def process(rows):
 '''
 
 
-def _run(args: list[str], cwd: Path | None = None, timeout: float = 3.0) -> subprocess.CompletedProcess:
+def _run(args: list[str], cwd: Path | None = None, timeout: float = 10.0) -> subprocess.CompletedProcess:
+    # timeout=10s (was 3): CI runners can spend >3s just on Python cold
+    # start + tree-sitter native import + first tree-sitter parse (JIT-y
+    # compilation on first call). Local runs finish in <1s; the higher
+    # ceiling only matters when the process is actually stuck.
     return subprocess.run(
         CLI + args,
         cwd=str(cwd) if cwd else None,
@@ -166,11 +170,16 @@ def test_serve_starts_and_serves_html(tmp_path: Path) -> None:
         stderr=subprocess.PIPE,
     )
     try:
-        assert _wait_for_port("127.0.0.1", port, timeout=2.5), (
+        # macOS GitHub runners are ~2-3x slower for Python cold start
+        # (interpreter + tree-sitter native import + full_scan). 2.5s
+        # was tight on Ubuntu and flaky on macOS; 8s covers cold start
+        # everywhere without adding meaningful wall time when the port
+        # opens fast (the wait loop returns as soon as it binds).
+        assert _wait_for_port("127.0.0.1", port, timeout=8.0), (
             "serve never bound the port"
         )
         with urllib.request.urlopen(
-            f"http://127.0.0.1:{port}/", timeout=2
+            f"http://127.0.0.1:{port}/", timeout=5
         ) as resp:
             assert resp.status == 200
             ctype = resp.headers.get("content-type", "")

@@ -42,7 +42,11 @@ jobs:
       - name: Install cockpit + dev deps
         run: pip install ".[dev]"
       - name: pytest
-        run: pytest -q
+        # -v so per-test outcomes print (needed to diagnose OS-specific
+        # failures — anon users can't fetch Actions logs, so the failure
+        # must be visible in the annotation stream). --tb=short keeps
+        # tracebacks legible.
+        run: pytest -v --tb=short
 
   coverage-gate:
     # Coverage floor is enforced on Ubuntu / Python 3.12 only (the matrix
