@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.3 — 2026-09-17
 
 **Repo hot-swap** — `cockpit serve` can now retarget a different repo
 without a restart. Click the repo label in the header, type an absolute

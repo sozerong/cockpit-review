@@ -1,6 +1,6 @@
 [project]
 name = "cockpit-review"
-version = "0.2.2"
+version = "0.2.3"
 description = "Deterministic verification cockpit for AI-generated code — no LLM in the analysis path"
 readme = "README.md"
 requires-python = ">=3.11"
