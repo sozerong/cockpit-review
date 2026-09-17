@@ -339,6 +339,32 @@ class ServeContext:
     state: "_State" = dataclasses.field(default_factory=lambda: _State())
     scanner: IncrementalScanner = dataclasses.field(default_factory=IncrementalScanner)
     allowed_hosts: set[str] = dataclasses.field(default_factory=set)
+    repo: Path | None = None
+    stop_event: threading.Event = dataclasses.field(default_factory=threading.Event)
+    watch_thread: threading.Thread | None = None
+
+    def switch_repo(self, new_repo: Path) -> None:
+        """Stop the current watch loop, reset scanner cache, point at
+        `new_repo`, restart the loop. HTTP socket / allowlist / long-poll
+        waiters are untouched — from the client's POV, the state version
+        just advances with the new repo's findings.
+
+        Callers must have already validated new_repo (absolute, exists,
+        is a directory) — see _Handler.do_POST for the /switch endpoint."""
+        self.stop_event.set()
+        if self.watch_thread is not None and self.watch_thread.is_alive():
+            self.watch_thread.join(timeout=3.0)
+        self.stop_event.clear()
+        # Fresh scanner: the previous repo's indices/mtimes/findings would
+        # otherwise all look "removed" on the first new scan.
+        self.scanner = IncrementalScanner()
+        self.repo = new_repo
+        self.state.set_phase("scanning", f"switching to {new_repo}")
+        self.watch_thread = threading.Thread(
+            target=_watch_loop, args=(new_repo,), kwargs={"ctx": self},
+            daemon=True, name=f"watch-{new_repo.name}",
+        )
+        self.watch_thread.start()
 
 
 def new_context() -> ServeContext:
@@ -412,8 +438,14 @@ def _watch_loop(repo: Path, ctx: ServeContext | None = None) -> None:
     prev = _snapshot(repo)
     last_change_at: float | None = None
     while True:
+        # Cooperative exit: switch_repo() sets stop_event to spin down
+        # this loop before starting a fresh one for the new repo.
+        if ctx.stop_event.is_set():
+            return
         try:
             time.sleep(POLL_INTERVAL)
+            if ctx.stop_event.is_set():
+                return
             cur = _snapshot(repo)
             if cur != prev:
                 changed = _changed_paths(prev, cur)
@@ -499,21 +531,78 @@ class _Handler(BaseHTTPRequestHandler):
                            b'{"error":"too many waiters"}')
                 return
             version, envelope, scanning = state.wait_after(since, WAIT_TIMEOUT)
+            sys_snap = state.snapshot_system()
+            ctx_repo = self._get_ctx().repo
+            sys_snap["repo"] = str(ctx_repo) if ctx_repo else None
             body = json.dumps({
                 "version": version,
                 "envelope": envelope,
                 "scanning": scanning,
-                "system": state.snapshot_system(),
+                "system": sys_snap,
             }, ensure_ascii=False).encode("utf-8")
             self._send(200, "application/json", body)
         elif url.path == "/system.json":
-            body = json.dumps(state.snapshot_system(), ensure_ascii=False).encode("utf-8")
+            sys_snap = state.snapshot_system()
+            ctx_repo = self._get_ctx().repo
+            sys_snap["repo"] = str(ctx_repo) if ctx_repo else None
+            body = json.dumps(sys_snap, ensure_ascii=False).encode("utf-8")
             self._send(200, "application/json", body)
         else:
             self._send(404, "text/plain", b"not found")
 
     def do_HEAD(self) -> None:  # trivially supportable; some health checks use it
         self.do_GET()
+
+    def do_POST(self) -> None:
+        """POST /switch  {"repo": "/absolute/path"}  →  hot-swap target repo.
+
+        The socket, allowlist, and long-poll waiters stay live; only the
+        watch thread + scanner cache get replaced. Validation is strict —
+        we don't want a stray click to make the server scan `/etc`."""
+        if not self._host_ok():
+            self._send(400, "text/plain", b"host header rejected")
+            return
+        try:
+            url = urlparse(self.path)
+        except ValueError:
+            self._send(400, "text/plain", b"bad url")
+            return
+        if url.path != "/switch":
+            self._send(404, "text/plain", b"not found")
+            return
+        length = int(self.headers.get("Content-Length") or 0)
+        if length <= 0 or length > 4096:
+            self._send(400, "application/json",
+                       b'{"error":"missing or oversized body"}')
+            return
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            self._send(400, "application/json", b'{"error":"bad json"}')
+            return
+        new_repo_str = payload.get("repo") if isinstance(payload, dict) else None
+        if not isinstance(new_repo_str, str) or not new_repo_str:
+            self._send(400, "application/json",
+                       b'{"error":"missing repo"}')
+            return
+        p = Path(new_repo_str).expanduser()
+        if not p.is_absolute():
+            self._send(400, "application/json",
+                       b'{"error":"repo must be an absolute path"}')
+            return
+        try:
+            resolved = p.resolve(strict=True)
+        except (OSError, RuntimeError):
+            self._send(400, "application/json",
+                       b'{"error":"repo does not exist"}')
+            return
+        if not resolved.is_dir():
+            self._send(400, "application/json",
+                       b'{"error":"repo is not a directory"}')
+            return
+        self._get_ctx().switch_repo(resolved)
+        body = json.dumps({"repo": str(resolved)}).encode("utf-8")
+        self._send(200, "application/json", body)
 
     def _send(self, status: int, ctype: str, body: bytes) -> None:
         try:
@@ -578,9 +667,12 @@ def _make_handler(ctx: ServeContext) -> type[_Handler]:
 def cmd_serve(repo: Path, port: int = 8765, host: str = "127.0.0.1",
               ctx: ServeContext | None = None) -> int:
     ctx = ctx or _default_ctx
-    t = threading.Thread(target=_watch_loop, args=(repo,), kwargs={"ctx": ctx},
-                         daemon=True)
-    t.start()
+    ctx.repo = repo
+    ctx.watch_thread = threading.Thread(
+        target=_watch_loop, args=(repo,), kwargs={"ctx": ctx},
+        daemon=True, name=f"watch-{repo.name}",
+    )
+    ctx.watch_thread.start()
 
     # Populate Host-header allowlist for DNS-rebinding defense.
     ctx.allowed_hosts.clear()

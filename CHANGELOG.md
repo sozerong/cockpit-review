@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.3 — 2026-09-17
+
+**Repo hot-swap** — `cockpit serve` can now retarget a different repo
+without a restart. Click the repo label in the header, type an absolute
+path, hit "switch"; the server stops the current watch loop, resets
+the scanner cache, and starts fresh on the new repo. Socket / allowlist
+/ long-poll waiters stay live.
+
+New endpoint: `POST /switch  {"repo": "/absolute/path"}`. Server
+validates absolute-path, exists, and is-a-directory (won't scan
+random files if you fat-finger the input). `ServeContext` gained
+`repo`, `stop_event`, `watch_thread`, and a `switch_repo()` method
+that owns the whole handoff.
+
 ## 0.2.2 — 2026-09-17
 
 Follow-on to the v0.2.1 senior-review hardening. Every remaining

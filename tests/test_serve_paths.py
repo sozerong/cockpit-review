@@ -192,6 +192,69 @@ def test_new_context_is_isolated():
     assert a.allowed_hosts is not b.allowed_hosts
 
 
+def test_switch_repo_stops_thread_and_resets_scanner(tmp_path, make_repo):
+    """switch_repo() must join the old watch thread, install a fresh
+    IncrementalScanner, and start a new thread pointed at the new repo."""
+    import threading, time
+    repo_a = make_repo({"a.py": b"x = 1\n"})
+    repo_b = make_repo({"b.py": b"y = 2\n"})
+    ctx = serve.new_context()
+    ctx.repo = repo_a
+    # Start a real watch thread (it will do the initial scan then poll).
+    ctx.watch_thread = threading.Thread(
+        target=serve._watch_loop, args=(repo_a,), kwargs={"ctx": ctx}, daemon=True,
+    )
+    ctx.watch_thread.start()
+    # Give the initial scan a moment.
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and ctx.state.version == 0:
+        time.sleep(0.05)
+    assert ctx.state.version > 0, "initial scan never emitted"
+    scanner_before = ctx.scanner
+    thread_before = ctx.watch_thread
+
+    ctx.switch_repo(repo_b)
+
+    assert ctx.repo == repo_b
+    assert ctx.scanner is not scanner_before, "scanner cache must be reset"
+    assert ctx.watch_thread is not thread_before, "must spawn new thread"
+    assert not thread_before.is_alive(), "old thread must have exited"
+
+
+def test_handler_post_switch_validates_path(running_server, tmp_path):
+    """POST /switch rejects missing / relative / nonexistent / non-dir."""
+    import http.client
+    def _post(body: bytes | str) -> tuple[int, dict | None]:
+        conn = http.client.HTTPConnection("127.0.0.1", running_server, timeout=2)
+        try:
+            conn.request("POST", "/switch", body=body,
+                         headers={"Content-Type": "application/json"})
+            r = conn.getresponse()
+            data = r.read()
+            try:
+                return r.status, json.loads(data)
+            except ValueError:
+                return r.status, None
+        finally:
+            conn.close()
+
+    # No body
+    assert _post(b"")[0] == 400
+    # Bad JSON
+    assert _post(b"not json")[0] == 400
+    # Missing repo key
+    assert _post(json.dumps({}))[0] == 400
+    # Relative path
+    assert _post(json.dumps({"repo": "some/relative"}))[0] == 400
+    # Absolute but nonexistent
+    assert _post(json.dumps({"repo": "/nonexistent/xyz-cockpit-test"}))[0] == 400
+    # A file, not a dir
+    a_file = tmp_path / "notadir.py"
+    a_file.write_text("x = 1\n")
+    st, _ = _post(json.dumps({"repo": str(a_file)}))
+    assert st == 400
+
+
 def test_bound_handler_reads_own_ctx():
     """A handler class bound to ctx_A must not see ctx_B's allowlist."""
     a = serve.new_context()
