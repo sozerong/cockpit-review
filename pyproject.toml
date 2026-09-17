@@ -61,11 +61,11 @@ include = [
 #
 # Aspirational per-module targets (not enforced natively — track by
 # eyeball in `pytest --cov=cockpit --cov-report=term`):
-#   incremental.py  >= 90%  (currently 93%)
-#   diff.py         >= 85%  (currently 86%)
-#   cli.py          >= 60%
-#   serve.py        >= 65%  (currently 50% — gap)
-#   watch.py        >= 60%  (currently 23% — gap)
+#   incremental.py  >= 90%  (93% ✓)
+#   diff.py         >= 85%  (86% ✓)
+#   cli.py          >= 60%  (raised via test_cli_direct.py)
+#   serve.py        >= 65%  (86% ✓, raised via test_serve_paths.py)
+#   watch.py        >= 60%  (94% ✓, raised via test_watch.py)
 
 [tool.pytest.ini_options]
 minversion = "8"
@@ -77,9 +77,10 @@ source = ["src/cockpit"]
 branch = true
 
 [tool.coverage.report]
-# Overall floor. Bumped from 68 (baseline) after tests/test_cli_direct.py
-# landed. Never lower — add tests instead.
-fail_under = 70
+# Overall floor. Ratcheted up as tests land: 68 (baseline) → 70 (cli
+# direct tests) → 85 (serve+watch coverage push). Never lower — add
+# tests instead.
+fail_under = 85
 show_missing = true
 exclude_lines = [
     "pragma: no cover",

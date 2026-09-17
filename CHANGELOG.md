@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+**Coverage floor raised to 85%** — new `tests/test_watch.py` (8) and
+`tests/test_serve_paths.py` (12) close the senior QA review's
+serve/watch gaps:
+
+    serve.py:  50%  ->  86%   (target >= 65)
+    watch.py:  23%  ->  94%   (target >= 60)
+    total:     83%  ->  88%   (floor bumped 70 -> 85)
+
+Every senior-QA per-module target for v0.3.0 now passing. Remaining
+uncovered lines are hard error paths (broken socket, cmd_serve boot,
+scan-crash except branches).
+
 **QA gates codified** — senior QA review's v0.3.0 coverage floor now
 enforced in CI, not just aspirational:
 

@@ -61,7 +61,7 @@ jobs:
       - name: Install cockpit + dev deps
         run: pip install ".[dev]"
       - name: pytest with coverage floor
-        run: pytest --cov=cockpit --cov-branch --cov-fail-under=70 -q
+        run: pytest --cov=cockpit --cov-branch --cov-fail-under=85 -q
 
   flake-budget:
     # Zero-flake budget: run the suite 5× on Ubuntu/3.12. Any single
