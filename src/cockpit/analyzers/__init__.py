@@ -18,6 +18,7 @@ from .test_time_sleep import TestTimeSleep
 # mocks_target v2: SUT-name filter closes the v1 precision hole
 # (test_<sym>_... must match the mocked symbol). Re-enabled 2026-09-17.
 from .mocks_target import MocksTarget
+from .ponytail_reinvented import PonytailReinvented
 
 
 @runtime_checkable
@@ -47,6 +48,7 @@ ANALYZERS: list[Analyzer] = [
     ArgMutableDefault(),
     TestTimeSleep(),
     MocksTarget(),
+    PonytailReinvented(),
 ]
 
 

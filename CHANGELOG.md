@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+**`ponytail.reinvented` v1 — new analyzer** — flags code that reinvents
+a stdlib primitive. Two patterns for v1, both `info` severity (suggestion,
+not bug):
+
+    total = 0                  # -> total = sum(xs)
+    for x in xs:
+        total += x
+
+    m = xs[0]                  # -> m = max(xs)
+    for x in xs:
+        if x > m:
+            m = x
+
+Precision-first shape rules: seed must be the statement IMMEDIATELY before
+the `for`; the body must be a single statement; the augmenting expression
+must be the exact loop variable. `total += x.value`, multi-statement
+bodies, non-zero seeds, or a seed detached from the loop by any
+intervening code — all skipped. 10 regression tests; 0 findings on
+cockpit's own repo.
+
 **`test.mocks-target` v2 — re-enabled** — v1 shipped disabled because
 precision measured <0.7 on the 20-finding pilot (§13.5 stop criterion).
 v2 adds a SUT-name filter: a patched target symbol is flagged **only**
