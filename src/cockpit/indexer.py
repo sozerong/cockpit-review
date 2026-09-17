@@ -25,6 +25,13 @@ class Symbol:
 _next_generation = itertools.count(1)
 
 
+def _bump_generation_past(minimum: int) -> None:
+    """Advance the module-level counter past `minimum` so a persisted
+    FileIndex loaded from disk cannot collide with a freshly indexed one."""
+    global _next_generation
+    _next_generation = itertools.count(max(minimum + 1, next(_next_generation)))
+
+
 @dataclass(frozen=True)
 class FileIndex:
     path: str            # repo-relative POSIX

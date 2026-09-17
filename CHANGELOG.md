@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+**Persistence** — `IncrementalScanner` now dumps its indices/mtimes/cache
+to `.cockpit/state/scanner-v1.json` after each successful scan and reloads
+on start. `cockpit check` and `cockpit serve` both benefit: a fresh
+process on an unchanged tree hits the warm path instead of repeating the
+cold scan. Version-stamped by `cockpit.__version__` — an upgrade
+auto-invalidates the state so analyzer version bumps ride along cleanly.
+Atomic write via `os.replace`; silent on any load/save error (same
+policy as `baseline.load`).
+
 ## 0.2.1 — 2026-09-17
 
 Hardening release from four independent senior reviews (QA, backend,

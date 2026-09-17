@@ -342,6 +342,9 @@ _scanner = IncrementalScanner()
 def _scan(repo: Path, force_full: bool = False) -> dict:
     """Wrap incremental scan with baseline + rationale annotations."""
     env = _scanner.scan(repo, force_full=force_full, set_phase=_state.set_phase)
+    # Best-effort persistence: dump the caches so the next process start
+    # skips the cold scan. Silent on failure — never blocks the watch loop.
+    _scanner.save(repo)
 
     baselined = bl.load(repo)
     env["has_baseline"] = baselined is not None
@@ -371,8 +374,11 @@ def _watch_loop(repo: Path) -> None:
             _state.set_scanning(False)
             _state.set_phase("idle")
 
-    _state.set_phase("scanning", "cold start")
-    _safe_scan(force_full=True)
+    # Warm-start from `.cockpit/state/` if it survived a previous run.
+    # load() is silent on miss/corrupt so it never blocks cold scan.
+    warm = _scanner.load(repo)
+    _state.set_phase("scanning", "warm resume" if warm else "cold start")
+    _safe_scan(force_full=not warm)
 
     prev = _snapshot(repo)
     last_change_at: float | None = None
