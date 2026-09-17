@@ -231,7 +231,14 @@ tr.finding:hover { background: var(--stripe); }
 
 <header>
   <h1>cockpit</h1>
-  <span class="repo" id="repo" data-t="connecting">connecting…</span>
+  <span class="repo" id="repo" data-t="connecting" title="click to change repo">connecting…</span>
+  <form id="switch-form" hidden style="display:inline-flex;gap:.35rem;align-items:baseline;">
+    <input id="switch-input" type="text" placeholder="/absolute/path/to/repo"
+           style="min-width:32ch;padding:.15rem .4rem;border:1px solid var(--border);background:var(--bg);color:var(--fg);border-radius:3px;font-family:ui-monospace,monospace;font-size:.8rem;">
+    <button type="submit" style="padding:.15rem .55rem;border:1px solid var(--border);background:var(--bg);color:var(--fg);border-radius:3px;font-size:.8rem;cursor:pointer;">switch</button>
+    <button type="button" id="switch-cancel" style="padding:.15rem .55rem;border:1px solid var(--border);background:transparent;color:var(--muted);border-radius:3px;font-size:.8rem;cursor:pointer;">cancel</button>
+    <span id="switch-error" style="color:var(--block);font-size:.75rem;"></span>
+  </form>
   <div class="summary" id="summary"></div>
   <span class="live"><span class="dot" id="dot"></span><span id="livetext" data-t="live">live</span></span>
   <span class="seg" id="lang-mode" role="group" aria-label="language" style="margin-left:auto;">
@@ -829,4 +836,56 @@ async function poll() {
   }
 }
 poll();
+
+// ── Repo hot-swap wiring ──────────────────────────────────────────────
+// Click the repo label to reveal an inline path input; submit posts to
+// /switch. Server validates absolute-path + exists + is-dir; on success
+// the poll loop picks up the new envelope on the next long-poll tick.
+(() => {
+  const repoLabel = document.getElementById("repo");
+  const form = document.getElementById("switch-form");
+  const input = document.getElementById("switch-input");
+  const cancel = document.getElementById("switch-cancel");
+  const errorEl = document.getElementById("switch-error");
+
+  function reveal() {
+    form.hidden = false;
+    repoLabel.hidden = true;
+    input.value = repoLabel.textContent.trim();
+    input.focus();
+    input.select();
+  }
+  function hide() {
+    form.hidden = true;
+    repoLabel.hidden = false;
+    errorEl.textContent = "";
+  }
+  repoLabel.style.cursor = "pointer";
+  repoLabel.addEventListener("click", reveal);
+  cancel.addEventListener("click", hide);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); hide(); }
+  });
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorEl.textContent = "";
+    const repo = input.value.trim();
+    if (!repo) return;
+    try {
+      const r = await fetch("/switch", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({repo}),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({error: r.statusText}));
+        errorEl.textContent = j.error || `HTTP ${r.status}`;
+        return;
+      }
+      hide();
+    } catch (err) {
+      errorEl.textContent = String(err);
+    }
+  });
+})();
 </script>
