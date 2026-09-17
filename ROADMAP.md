@@ -3,6 +3,8 @@
 A living document. Goal-line: startup-grade deterministic code reviewer,
 distributable as a local CLI and hostable as a PR-review SaaS.
 
+- **Founder cadence cap:** Solo founder. Max one milestone active at a time. If a milestone slips >6 weeks past its target, kill or descope — do not stack.
+
 ## M0.2 · Local tool finished — target 2026-09-30
 
 Deterministic Python analyzer with a real test suite, real distribution.
@@ -37,6 +39,7 @@ Small teams (10-100 engineers) use it as part of code review.
 - [ ] **brew / scoop** distribution
 - [ ] Public benchmark leaderboard (already have data — publish `bench/history/` as
       a page)
+- **Kill gate:** If <3 teams running cockpit in CI by 2026-12-01, stop TypeScript track and re-scope to Python-only depth.
 
 ## M1.0 · SaaS — target 2027-Q1
 
@@ -50,6 +53,7 @@ Hosted service. Real product.
 - [ ] **API** — CLI can talk to hosted server; local + cloud modes share findings
 - [ ] **Reproducibility** — every finding on the web dashboard links to the exact
       commit + analyzer version that produced it
+- **Kill gate:** If <$5k MRR by 2027-Q2, sunset hosted product and stay OSS-only.
 
 ## Beyond 1.0 · defensible product
 
