@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+**`test.mocks-target` v2 — re-enabled** — v1 shipped disabled because
+precision measured <0.7 on the 20-finding pilot (§13.5 stop criterion).
+v2 adds a SUT-name filter: a patched target symbol is flagged **only**
+when the test function name starts with `test_<sym>` or `test_<sym>_...`
+(case-insensitive; PascalCase SUT vs snake_case test name handled).
+
+    test_compute_handles_zero + patch("mod.compute")     → BAD (SUT match)
+    test_widget_spin          + patch.object(mod, "Widget") → BAD
+    test_orchestrator_uses_compute + patch("mod.compute") → OK (dependency)
+
+Severity: warn. Re-runs of the pilot show 0 false positives on cockpit's
+own test suite. 14 regression tests covering SUT-filter word boundaries,
+`mocker.patch`, `patch.object`, and dependency-mock negatives.
+
 **Persistence** — `IncrementalScanner` now dumps its indices/mtimes/cache
 to `.cockpit/state/scanner-v1.json` after each successful scan and reloads
 on start. `cockpit check` and `cockpit serve` both benefit: a fresh

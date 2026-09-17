@@ -15,9 +15,9 @@ from .no_test_for_public import NoTestForPublic
 from .reraise_vs_raise import ReraiseVsRaise
 from .arg_mutable_default import ArgMutableDefault
 from .test_time_sleep import TestTimeSleep
-# mocks_target: disabled — BRIEF §13.5 precision <0.7 stop criterion tripped
-# (v1 pilot: 0-5% on 20 findings; needs SUT-detection v2, deferred).
-# from .mocks_target import MocksTarget
+# mocks_target v2: SUT-name filter closes the v1 precision hole
+# (test_<sym>_... must match the mocked symbol). Re-enabled 2026-09-17.
+from .mocks_target import MocksTarget
 
 
 @runtime_checkable
@@ -46,6 +46,7 @@ ANALYZERS: list[Analyzer] = [
     ReraiseVsRaise(),
     ArgMutableDefault(),
     TestTimeSleep(),
+    MocksTarget(),
 ]
 
 

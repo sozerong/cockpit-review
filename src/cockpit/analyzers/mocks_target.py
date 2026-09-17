@@ -3,20 +3,29 @@
 BRIEF §5 test.authenticity의 핵심 판정. §13.3 "가장 구현 어렵고 이 파일럿의
 병목". §13.5 중단 기준: 관계 판정 정밀도 <0.7이면 지표에서 제외.
 
-로직 (v1):
+v2 (SUT 필터): v1은 target 심볼을 patch하면 무조건 flag하다 오탐이 많았음
+(`test_orchestrator_uses_compute`가 `compute`를 patch하는 건 정상). v2는
+test 함수 이름이 patch된 심볼로 시작해야만 flag한다:
+
+    test_compute_handles_zero  + patch("mod.compute")  → BAD (직접 검증 대상)
+    test_widget_spin           + patch.object(mod, "Widget") → BAD
+    test_orchestrator_uses_compute + patch("mod.compute") → OK (compute는 의존성)
+
+로직:
 1. test 파일 → target 파일 매핑 (naming convention)
    `<dir>/test_foo.py`  → same-dir `foo.py` / `../foo.py` / `../src/foo.py` 등
 2. target 파일의 top-level 심볼 (함수/클래스) 수집
 3. test 파일에서 `patch("path.to.X")`, `mocker.patch("...")`, `patch.object(mod, "X")`
    호출 감지
-4. patch target의 마지막 세그먼트가 target 심볼에 속하면 → warn
+4. patch target 마지막 세그먼트가 target 심볼에 속하고 AND
+   test 함수 이름이 `test_<sym>` 으로 시작 → warn
    ("test가 검증 대상 X를 mock하고 있음")
 
-v1 한계 (문서화):
+v2 한계 (문서화):
 - import alias(`from mymodule import target as alias; patch("mod.alias")`) 미처리
 - 동적 patch (`patch(target_var)`) 미처리
-- src/ 레이아웃과 flat 레이아웃 외 발견 못 하는 target 있음
 - 다중 test 파일이 한 target 매핑 시 첫 매치만
+- 헬퍼 함수(`_test_helper_compute(...)` 안에서 patch)는 test_ 접두어가 없어 놓침
 """
 from __future__ import annotations
 from functools import lru_cache
@@ -159,9 +168,24 @@ def _patched_symbol(call: Any) -> str | None:
     return raw.rsplit(".", 1)[-1]
 
 
+def _sut_syms_in_test_name(test_name: str, target_syms: set[str]) -> set[str]:
+    """SUT filter: return the subset of target_syms that the test name
+    claims to verify — i.e. `test_<sym>_...` pattern. Case-insensitive so
+    `test_widget_spin` matches PascalCase `Widget`.
+
+    This is the v2 precision fix: v1 flagged every patch of a target
+    symbol, which false-positived on tests that mock a SUT symbol as a
+    dependency of a different SUT symbol under test."""
+    if not test_name.startswith("test_"):
+        return set()
+    tail = test_name[len("test_"):].lower()
+    return {s for s in target_syms
+            if tail == s.lower() or tail.startswith(s.lower() + "_")}
+
+
 class MocksTarget:
     id = "test.mocks-target"
-    version = "1"
+    version = "2"
 
     def analyze(self, cs: ChangeSet, indices: dict[str, FileIndex]) -> list[Finding]:
         from tree_sitter import QueryCursor
@@ -184,15 +208,17 @@ class MocksTarget:
             src = normalize_bytes(fc.absolute.read_bytes())
             tree = _parser().parse(src)
             # Walk each test_ function; collect patch calls whose target
-            # matches a top-level symbol of the mapped target file.
+            # matches a top-level symbol of the mapped target file AND
+            # whose test-name identifies that symbol as the SUT.
             for _, caps in QueryCursor(q).matches(tree.root_node):
                 if "fn" not in caps:
                     continue
                 fn_node = caps["fn"][0]
                 name = caps["name"][0].text.decode("utf-8", "replace")
-                if not name.startswith("test_"):
+                sut = _sut_syms_in_test_name(name, target_syms)
+                if not sut:
                     continue
-                hits = _mocked_targets(fn_node, target_syms)
+                hits = _mocked_targets(fn_node, sut)
                 if not hits:
                     continue
                 out.append(Finding(
@@ -243,14 +269,21 @@ def demo() -> None:
             "from unittest.mock import patch\n"
             "import pytest\n"
             "\n"
-            "def test_bad_mocks_target():\n"
+            "def test_compute_handles_zero():\n"
+            "    # BAD: test claims to verify `compute` but mocks it.\n"
             "    with patch('foo.compute', return_value=99):\n"
             "        assert True\n"
             "\n"
-            "def test_bad_patch_object():\n"
+            "def test_widget_spin():\n"
+            "    # BAD: test claims to verify `Widget` but patches it.\n"
             "    import foo\n"
             "    with patch.object(foo, 'Widget'):\n"
             "        pass\n"
+            "\n"
+            "def test_orchestrator_uses_compute():\n"
+            "    # OK v2: SUT is orchestrator, compute is a dependency.\n"
+            "    with patch('foo.compute'):\n"
+            "        assert True\n"
             "\n"
             "def test_ok_mocks_dependency():\n"
             "    with patch('other.helper'):\n"
@@ -260,10 +293,10 @@ def demo() -> None:
         indices = {fc.path: index_file(fc.path, fc.absolute) for fc in cs.files}
         findings = MocksTarget().analyze(cs, indices)
         names = sorted(f.symbol for f in findings)
-        assert names == ["test_bad_mocks_target", "test_bad_patch_object"], names
+        assert names == ["test_compute_handles_zero", "test_widget_spin"], names
         mocked = sorted(sym for f in findings for sym in f.evidence["mocked_symbols"])
         assert mocked == ["Widget", "compute"], mocked
-        print("mocks-target ok", names)
+        print("mocks-target v2 ok", names)
 
 
 if __name__ == "__main__":
