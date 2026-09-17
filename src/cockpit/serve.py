@@ -12,6 +12,7 @@ for a single-user dev-loop dashboard.
 """
 from __future__ import annotations
 import collections
+import dataclasses
 import datetime
 import json
 import sys
@@ -321,7 +322,31 @@ class _State:
             }
 
 
-_state = _State()
+@dataclasses.dataclass
+class ServeContext:
+    """Owns the per-server-instance mutable state (scan state, scanner
+    cache, DNS-rebinding allowlist). Backend senior review flagged the
+    three module-level singletons as arch debt. This wraps them into one
+    object so tests can spin up an isolated context, and so a future
+    multi-tenant serve (multiple repos in one process) becomes possible
+    without a rewrite.
+
+    Backward-compat aliases (`_state`, `_scanner`, `_ALLOWED_HOSTS`) still
+    point at `_default_ctx` fields — existing tests and integrations keep
+    working. New callers should pass `ctx=` explicitly."""
+    state: "_State" = dataclasses.field(default_factory=lambda: _State())
+    scanner: IncrementalScanner = dataclasses.field(default_factory=IncrementalScanner)
+    allowed_hosts: set[str] = dataclasses.field(default_factory=set)
+
+
+def new_context() -> ServeContext:
+    """Fresh, isolated context. Prefer this in tests over monkeypatching
+    the module singletons."""
+    return ServeContext()
+
+
+_default_ctx = ServeContext()
+_state = _default_ctx.state
 
 
 def _counts_by_analyzer(findings: list[dict]) -> list[dict]:
@@ -336,15 +361,16 @@ def _counts_by_analyzer(findings: list[dict]) -> list[dict]:
     return out
 
 
-_scanner = IncrementalScanner()
+_scanner = _default_ctx.scanner
 
 
-def _scan(repo: Path, force_full: bool = False) -> dict:
+def _scan(repo: Path, force_full: bool = False, ctx: ServeContext | None = None) -> dict:
     """Wrap incremental scan with baseline + rationale annotations."""
-    env = _scanner.scan(repo, force_full=force_full, set_phase=_state.set_phase)
+    ctx = ctx or _default_ctx
+    env = ctx.scanner.scan(repo, force_full=force_full, set_phase=ctx.state.set_phase)
     # Best-effort persistence: dump the caches so the next process start
     # skips the cold scan. Silent on failure — never blocks the watch loop.
-    _scanner.save(repo)
+    ctx.scanner.save(repo)
 
     baselined = bl.load(repo)
     env["has_baseline"] = baselined is not None
@@ -359,25 +385,26 @@ def _scan(repo: Path, force_full: bool = False) -> dict:
     return env
 
 
-def _watch_loop(repo: Path) -> None:
+def _watch_loop(repo: Path, ctx: ServeContext | None = None) -> None:
     """Watch the repo forever. Any exception inside a scan is logged and
     the loop continues — a crashed scan must never wedge the UI into
     perpetual "scanning…" (previous versions did exactly that)."""
+    ctx = ctx or _default_ctx
     def _safe_scan(force_full: bool = False) -> None:
-        _state.set_scanning(True)
+        ctx.state.set_scanning(True)
         try:
-            _state.set(_scan(repo, force_full=force_full))
+            ctx.state.set(_scan(repo, force_full=force_full, ctx=ctx))
         except Exception:
             print("cockpit serve: scan failed:", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
         finally:
-            _state.set_scanning(False)
-            _state.set_phase("idle")
+            ctx.state.set_scanning(False)
+            ctx.state.set_phase("idle")
 
     # Warm-start from `.cockpit/state/` if it survived a previous run.
     # load() is silent on miss/corrupt so it never blocks cold scan.
-    warm = _scanner.load(repo)
-    _state.set_phase("scanning", "warm resume" if warm else "cold start")
+    warm = ctx.scanner.load(repo)
+    ctx.state.set_phase("scanning", "warm resume" if warm else "cold start")
     _safe_scan(force_full=not warm)
 
     prev = _snapshot(repo)
@@ -388,8 +415,8 @@ def _watch_loop(repo: Path) -> None:
             cur = _snapshot(repo)
             if cur != prev:
                 changed = _changed_paths(prev, cur)
-                _state.set_phase("debouncing",
-                                 f"{len(changed)} files (waiting {DEBOUNCE:.1f}s quiet)")
+                ctx.state.set_phase("debouncing",
+                                    f"{len(changed)} files (waiting {DEBOUNCE:.1f}s quiet)")
                 last_change_at = time.monotonic()
                 prev = cur
             elif last_change_at is not None and \
@@ -410,10 +437,13 @@ def _changed_paths(prev: dict[str, float], cur: dict[str, float]) -> list[str]:
 
 
 MAX_WAITERS = 64           # long-poll fairness cap; past this we 503
-_ALLOWED_HOSTS: set[str] = set()   # populated by cmd_serve
+_ALLOWED_HOSTS: set[str] = _default_ctx.allowed_hosts   # populated by cmd_serve
 
 
 class _Handler(BaseHTTPRequestHandler):
+    # Handler class overrides set this to a specific ServeContext; the
+    # default handler falls back to `_default_ctx` for backward compat.
+    _ctx: "ServeContext | None" = None
     # Kill slowloris — a client that opens a socket and never sends bytes
     # will otherwise hold a thread until TCP FIN.
     timeout = 15
@@ -425,15 +455,19 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args) -> None:
         pass  # ponytail: silence per-request access log
 
+    def _get_ctx(self) -> "ServeContext":
+        return self._ctx or _default_ctx
+
     def _host_ok(self) -> bool:
         """Reject requests with a Host header outside the allowlist.
         DNS-rebinding defense: an external site can otherwise coerce
         the browser into fetching http://127.0.0.1:port under its own
         origin and reading source snippets."""
         host = (self.headers.get("Host") or "").strip().lower()
-        if not _ALLOWED_HOSTS:
+        allowlist = self._get_ctx().allowed_hosts
+        if not allowlist:
             return True   # allowlist not configured — off by default
-        return host in _ALLOWED_HOSTS
+        return host in allowlist
 
     def do_GET(self) -> None:
         if not self._host_ok():
@@ -444,6 +478,7 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError:
             self._send(400, "text/plain", b"bad url")
             return
+        state = self._get_ctx().state
         if url.path == "/":
             strings_json = json.dumps(_STRINGS, ensure_ascii=False)
             # Belt-and-suspenders against payload closing the injecting script tag.
@@ -457,20 +492,20 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(400, "application/json",
                            b'{"error":"bad since"}')
                 return
-            if _state.waiters >= MAX_WAITERS:
+            if state.waiters >= MAX_WAITERS:
                 self._send(503, "application/json",
                            b'{"error":"too many waiters"}')
                 return
-            version, envelope, scanning = _state.wait_after(since, WAIT_TIMEOUT)
+            version, envelope, scanning = state.wait_after(since, WAIT_TIMEOUT)
             body = json.dumps({
                 "version": version,
                 "envelope": envelope,
                 "scanning": scanning,
-                "system": _state.snapshot_system(),
+                "system": state.snapshot_system(),
             }, ensure_ascii=False).encode("utf-8")
             self._send(200, "application/json", body)
         elif url.path == "/system.json":
-            body = json.dumps(_state.snapshot_system(), ensure_ascii=False).encode("utf-8")
+            body = json.dumps(state.snapshot_system(), ensure_ascii=False).encode("utf-8")
             self._send(200, "application/json", body)
         else:
             self._send(404, "text/plain", b"not found")
@@ -508,20 +543,33 @@ class _Handler(BaseHTTPRequestHandler):
             pass
 
 
-def cmd_serve(repo: Path, port: int = 8765, host: str = "127.0.0.1") -> int:
-    t = threading.Thread(target=_watch_loop, args=(repo,), daemon=True)
+def _make_handler(ctx: ServeContext) -> type[_Handler]:
+    """Bind a ServeContext into a per-server handler subclass. Each
+    `cmd_serve` (or test) can spawn an isolated handler tied to its
+    own state/scanner/allowlist without touching module globals."""
+    class BoundHandler(_Handler):
+        pass
+    BoundHandler._ctx = ctx
+    return BoundHandler
+
+
+def cmd_serve(repo: Path, port: int = 8765, host: str = "127.0.0.1",
+              ctx: ServeContext | None = None) -> int:
+    ctx = ctx or _default_ctx
+    t = threading.Thread(target=_watch_loop, args=(repo,), kwargs={"ctx": ctx},
+                         daemon=True)
     t.start()
 
     # Populate Host-header allowlist for DNS-rebinding defense.
-    _ALLOWED_HOSTS.clear()
-    _ALLOWED_HOSTS.update({
+    ctx.allowed_hosts.clear()
+    ctx.allowed_hosts.update({
         f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}",
         f"127.0.0.1", "localhost", "[::1]",
     })
     if host not in ("127.0.0.1", "localhost", "::1", "0.0.0.0", "::"):
-        _ALLOWED_HOSTS.update({f"{host}:{port}", host})
+        ctx.allowed_hosts.update({f"{host}:{port}", host})
 
-    httpd = ThreadingHTTPServer((host, port), _Handler)
+    httpd = ThreadingHTTPServer((host, port), _make_handler(ctx))
     shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
     url = f"http://{shown}:{port}"
     print(f"cockpit serve · {url}  (Ctrl-C to stop)")

@@ -84,7 +84,7 @@ def test_watch_loop_detects_change_then_debounces(make_repo, monkeypatch):
     calls = {"n": 0}
     scans = {"n": 0}
 
-    def fake_scan(r, force_full=False):
+    def fake_scan(r, force_full=False, ctx=None):
         scans["n"] += 1
         return {
             "findings": [],
@@ -176,6 +176,33 @@ def test_handler_rejects_bad_url(running_server):
     s.close()
     # Either 400 (bad url) or 404 (path not matched) — server must not crash.
     assert b"400" in data or b"404" in data
+
+
+def test_new_context_is_isolated():
+    """Two ServeContexts must not share state — the point of the DI refactor."""
+    a = serve.new_context()
+    b = serve.new_context()
+    a.state.set({
+        "findings": [{"id": "x", "analyzer_id": "a", "severity": "warn"}],
+        "summary": {"files_scanned": 1},
+    })
+    assert a.state.version == 1
+    assert b.state.version == 0
+    assert a.scanner is not b.scanner
+    assert a.allowed_hosts is not b.allowed_hosts
+
+
+def test_bound_handler_reads_own_ctx():
+    """A handler class bound to ctx_A must not see ctx_B's allowlist."""
+    a = serve.new_context()
+    b = serve.new_context()
+    a.allowed_hosts.add("a.example")
+    b.allowed_hosts.add("b.example")
+    HA = serve._make_handler(a)
+    HB = serve._make_handler(b)
+    assert HA._ctx is a
+    assert HB._ctx is b
+    assert HA._ctx is not HB._ctx
 
 
 def test_handler_head_request_omits_body(running_server):
