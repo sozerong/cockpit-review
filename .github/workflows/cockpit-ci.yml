@@ -19,7 +19,11 @@ on:
     branches: [main, dev]
 
 permissions:
-  contents: read
+  # Post pytest tail as a commit comment on failure — the only way for
+  # anon readers to see the failure detail on a public repo without
+  # Actions log auth. Safe because the `test` job already gates fork
+  # PRs out (head.repo.full_name == github.repository).
+  contents: write
 
 jobs:
   test:
@@ -43,28 +47,32 @@ jobs:
         run: pip install ".[dev]"
       - name: pytest
         shell: bash
-        # On failure, mirror the tail of the pytest log into the check
-        # run's SUMMARY (which is anon-readable via GET /check-runs/{id}).
-        # Also emit each FAILED line as its own ::error:: annotation
-        # (also anon-readable). Between the two, an anon debugger can
-        # diagnose without Actions log auth.
         run: |
           set -o pipefail
           pytest -v --tb=long 2>&1 | tee pytest.log
-          rc=${PIPESTATUS[0]}
-          if [ $rc -ne 0 ]; then
-            grep -E "^FAILED " pytest.log | head -20 | while IFS= read -r line; do
-              echo "::error::$line"
-            done
-            {
-              echo "### pytest failure — ${{ matrix.os }} py${{ matrix.python }}"
-              echo ''
-              echo '```'
-              tail -c 60000 pytest.log
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+          exit ${PIPESTATUS[0]}
+      - name: Post pytest tail as commit comment on failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MATRIX_OS: ${{ matrix.os }}
+          MATRIX_PY: ${{ matrix.python }}
+        run: |
+          if [ ! -s pytest.log ]; then
+            echo "no pytest.log — earlier step failed"
+            exit 0
           fi
-          exit $rc
+          {
+            printf '### pytest failure — %s py%s\n\n' "$MATRIX_OS" "$MATRIX_PY"
+            printf '```\n'
+            tail -c 30000 pytest.log
+            printf '\n```\n'
+          } > /tmp/comment.md
+          jq -Rs '{body: .}' /tmp/comment.md > /tmp/comment.json
+          gh api --method POST \
+            "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            --input /tmp/comment.json
       - name: Upload pytest.log
         if: failure()
         uses: actions/upload-artifact@v4
