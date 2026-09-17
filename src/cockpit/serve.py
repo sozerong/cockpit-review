@@ -20,6 +20,7 @@ import sys
 import threading
 import time
 import traceback
+import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -544,6 +545,26 @@ class _Handler(BaseHTTPRequestHandler):
             pass
 
 
+class _FastHTTPServer(ThreadingHTTPServer):
+    """Skip HTTPServer's `getfqdn()` reverse-DNS on server_bind.
+
+    stdlib HTTPServer.server_bind does `socket.getfqdn(host)` between
+    the `bind()` and the `listen()`. On macOS this can take tens of
+    seconds resolving 127.0.0.1 via Bonjour/mDNS — during which the
+    socket is bound but not listening, so any client `connect()`
+    gets ECONNREFUSED. Integration tests then time out.
+
+    We keep the bind, skip the DNS lookup entirely, and store the host
+    as-is (server_name is only used in default Server: response headers,
+    which we already override in version_string()).
+    """
+    def server_bind(self) -> None:
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = host
+        self.server_port = port
+
+
 def _make_handler(ctx: ServeContext) -> type[_Handler]:
     """Bind a ServeContext into a per-server handler subclass. Each
     `cmd_serve` (or test) can spawn an isolated handler tied to its
@@ -570,7 +591,7 @@ def cmd_serve(repo: Path, port: int = 8765, host: str = "127.0.0.1",
     if host not in ("127.0.0.1", "localhost", "::1", "0.0.0.0", "::"):
         ctx.allowed_hosts.update({f"{host}:{port}", host})
 
-    httpd = ThreadingHTTPServer((host, port), _make_handler(ctx))
+    httpd = _FastHTTPServer((host, port), _make_handler(ctx))
     shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
     url = f"http://{shown}:{port}"
     print(f"cockpit serve · {url}  (Ctrl-C to stop)")
