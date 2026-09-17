@@ -237,7 +237,12 @@ def test_esc_function_covers_quote_and_apostrophe():
     HTML attribute."""
     from cockpit import serve, ui
     for module in (serve, ui):
-        page = getattr(module, "_PAGE", None) or getattr(module, "_TEMPLATE", "")
+        # serve.py's page now lives on disk (see refactor); ui.py still
+        # embeds _TEMPLATE. Grab whichever the module exposes.
+        if hasattr(module, "_load_page"):
+            page = module._load_page()
+        else:
+            page = getattr(module, "_PAGE", None) or getattr(module, "_TEMPLATE", "")
         # The literal esc() body must include the "-to-&quot; mapping and
         # the '-to-&#39; mapping.
         assert "&quot;" in page, \
