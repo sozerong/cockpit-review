@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.2.2 — 2026-09-17
+
+Follow-on to the v0.2.1 senior-review hardening. Every remaining
+code-actionable item from the four senior reviews (QA / backend /
+security / roadmap) is now cleared: coverage gate codified, mutation
+testing wired, scanner state persisted, singleton DI + `_PAGE` split
+done, two new analyzers, plus a macOS CI fix.
 
 **Backend arch debt cleared** — senior backend review's two remaining
 architecture items:
