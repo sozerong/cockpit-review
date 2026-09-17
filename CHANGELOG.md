@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+**Backend arch debt cleared** — senior backend review's two remaining
+architecture items:
+
+*serve.py singleton DI* — the three module-level singletons
+(`_state`, `_scanner`, `_ALLOWED_HOSTS`) are now bundled into a
+`ServeContext` dataclass. `_scan`, `_watch_loop`, and `cmd_serve` accept
+a `ctx=` kwarg; `_make_handler(ctx)` binds a per-context handler
+subclass so concurrent serves in one process each get their own state.
+Backward-compat aliases at module level keep existing callers working.
+
+*_PAGE extraction* — the 800-line embedded HTML/JS/CSS string in
+`serve.py` moved to `src/cockpit/static/index.html`, loaded via
+`functools.lru_cache` on first request. `serve.py` shrank 1463 → 637
+lines (-56%). The dashboard is now editable in HTML mode with full
+lint/format tooling. Hatch `force-include` pins the static file into
+the wheel (verified).
+
 **Mutation testing gate wired** — senior QA review's v0.3.0 line-item
 "≥70% mutmut kill rate on the deterministic analysis path" now has
 scaffolding:
