@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+**QA gates codified** — senior QA review's v0.3.0 coverage floor now
+enforced in CI, not just aspirational:
+
+- `pyproject.toml [tool.coverage.report] fail_under = 70` (measured 83%
+  with `demo()` self-checks excluded; overall raw is 74%)
+- New `coverage-gate` job in `cockpit-ci.yml` runs
+  `pytest --cov=cockpit --cov-branch --cov-fail-under=70` on Ubuntu/3.12
+- New `flake-budget` job runs the suite 5× and fails if any single run
+  fails — zero-flake budget in CI, not just in prose
+- 9 new direct-invocation CLI tests (`tests/test_cli_direct.py`) — the
+  T4 integration tests hit `cli.py` via subprocess, which pytest-cov
+  doesn't measure without a coveragerc dance; these hit `main()`
+  directly so the coverage number is real
+
+Per-module aspirational floors (documented in `pyproject.toml`, not
+enforced natively): incremental.py ≥90% (93% ✅), diff.py ≥85% (86% ✅),
+serve.py ≥65% (50% ⏳), watch.py ≥60% (23% ⏳). Follow-up work.
+
 **`ponytail.reinvented` v1 — new analyzer** — flags code that reinvents
 a stdlib primitive. Two patterns for v1, both `info` severity (suggestion,
 not bug):

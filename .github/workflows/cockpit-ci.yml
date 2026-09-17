@@ -44,6 +44,49 @@ jobs:
       - name: pytest
         run: pytest -q
 
+  coverage-gate:
+    # Coverage floor is enforced on Ubuntu / Python 3.12 only (the matrix
+    # test job already proves the suite passes on every OS/version). Runs
+    # in parallel with the matrix, gated on the QA senior review's 70%
+    # threshold codified in pyproject.toml [tool.coverage.report].
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install cockpit + dev deps
+        run: pip install ".[dev]"
+      - name: pytest with coverage floor
+        run: pytest --cov=cockpit --cov-branch --cov-fail-under=70 -q
+
+  flake-budget:
+    # Zero-flake budget: run the suite 5× on Ubuntu/3.12. Any single
+    # failure over 5 runs = a flaky test, which the QA senior review
+    # said we ship zero of. Bumped from 1 → 5 to catch order-dependent
+    # or clock-sensitive tests without exploding CI time.
+    needs: test
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install cockpit + dev deps
+        run: pip install ".[dev]"
+      - name: 5× pytest
+        run: |
+          for i in 1 2 3 4 5; do
+            echo "==== run $i ===="
+            pytest -q || { echo "FLAKE on run $i"; exit 1; }
+          done
+
   baseline-gate:
     needs: test
     if: >-
