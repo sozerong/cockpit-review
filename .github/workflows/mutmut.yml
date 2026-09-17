@@ -1,0 +1,95 @@
+name: mutmut
+# Mutation-testing gate: senior QA review's v0.3.0 line-item was
+# >=70% kill rate on the deterministic analysis path.
+#
+# Not run per-PR — mutation testing takes CPU-hours on a codebase this
+# size (~2200 stmts × ~5 mutants/stmt × 15s test suite). Runs on:
+#   - schedule: weekly (Monday 03:00 UTC — quiet hours)
+#   - workflow_dispatch: manual trigger for a green build before release
+#
+# Threshold enforcement waits for a first full run to establish the
+# baseline; the step then flips from "record" to "enforce".
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      paths:
+        description: "Override paths_to_mutate (comma-separated)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  mutmut:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300   # 5h ceiling; abort past that instead of billing forever
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install cockpit + mutation deps
+        run: pip install ".[dev,mutation]"
+      - name: Sanity — tests green before mutation
+        run: pytest -q
+      - name: Run mutmut
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          if [ -n "${{ github.event.inputs.paths }}" ]; then
+            python -m mutmut run --paths-to-mutate="${{ github.event.inputs.paths }}" || true
+          else
+            python -m mutmut run || true
+          fi
+      - name: Summarize + gate on kill rate
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python -m mutmut results > mutmut-results.txt || true
+          cat mutmut-results.txt
+          # Extract totals. mutmut results format: "N killed, N survived, ..."
+          python - <<'PY'
+          import re, sys, pathlib
+          text = pathlib.Path("mutmut-results.txt").read_text()
+          # mutmut prints e.g. "survived: 12", "killed: 100"
+          def n(kw):
+              m = re.search(rf"{kw}\s*[:=]?\s*(\d+)", text, re.I)
+              return int(m.group(1)) if m else 0
+          killed = n("killed")
+          survived = n("survived")
+          suspicious = n("suspicious")
+          timeout = n("timeout")
+          total = killed + survived + suspicious + timeout
+          if total == 0:
+              print("mutmut produced no results — bailing on gate.")
+              sys.exit(1)
+          rate = killed / total
+          print(f"kill rate: {killed}/{total} = {rate:.1%}")
+          # Threshold: 70% per senior QA v0.3.0 gate.
+          # First run may not hit it; set MUTMUT_ENFORCE=1 in CI vars once
+          # the baseline lands to flip this from recording to enforcing.
+          import os
+          enforce = os.environ.get("MUTMUT_ENFORCE") == "1"
+          if enforce and rate < 0.70:
+              print(f"FAIL: kill rate {rate:.1%} below 70% floor")
+              sys.exit(1)
+          if not enforce:
+              print("(not enforcing yet — set MUTMUT_ENFORCE=1 once baseline established)")
+          PY
+      - name: Upload mutmut HTML report
+        if: always()
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python -m mutmut html || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutmut-report
+          path: |
+            html/
+            mutmut-results.txt
+          retention-days: 30

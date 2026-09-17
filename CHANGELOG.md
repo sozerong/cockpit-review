@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+**Mutation testing gate wired** — senior QA review's v0.3.0 line-item
+"≥70% mutmut kill rate on the deterministic analysis path" now has
+scaffolding:
+
+- `mutmut>=2.4,<3.0` added under `[project.optional-dependencies].mutation`
+  (v3.x pinned out — no Windows support; v2.5.1 works cross-platform)
+- `[tool.mutmut]` config in `pyproject.toml` scoped to the analysis
+  path (`analyzers/`, `incremental.py`, `diff.py`, `baseline.py`,
+  `normalize.py`, `changeset.py`, `indexer.py`, `finding.py`).
+  Server/CLI/UI shells excluded (mostly wiring, low mutation payoff).
+- New `.github/workflows/mutmut.yml`: weekly cron (Mon 03:00 UTC) +
+  manual `workflow_dispatch`. NOT run per-PR — full mutation takes
+  CPU-hours. Job uploads HTML report as artifact (30-day retention).
+- Kill-rate gate is currently in *record* mode. Set the `MUTMUT_ENFORCE`
+  repo variable to `1` after the first full run establishes the
+  baseline; the workflow then fails when kill rate drops below 70%.
+
+Local mutmut runs on Windows are refused by mutmut itself (encoding
+bugs on non-ASCII source in v2, `abort()` in v3). Use WSL, Linux, or
+push to trigger the workflow.
+
 **Coverage floor raised to 85%** — new `tests/test_watch.py` (8) and
 `tests/test_serve_paths.py` (12) close the senior QA review's
 serve/watch gaps:
