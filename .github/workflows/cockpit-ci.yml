@@ -43,22 +43,26 @@ jobs:
         run: pip install ".[dev]"
       - name: pytest
         shell: bash
-        # -v so per-test outcomes print; on failure, mirror FAILED /
-        # error lines to GitHub annotations (`::error::`) so anon
-        # readers of the check-run annotations endpoint can see WHICH
-        # test failed without needing Actions log auth.
+        # On failure, mirror the tail of the pytest log into the check
+        # run's SUMMARY (which is anon-readable via GET /check-runs/{id}).
+        # Also emit each FAILED line as its own ::error:: annotation
+        # (also anon-readable). Between the two, an anon debugger can
+        # diagnose without Actions log auth.
         run: |
           set -o pipefail
           pytest -v --tb=long 2>&1 | tee pytest.log
           rc=${PIPESTATUS[0]}
           if [ $rc -ne 0 ]; then
-            echo "::group::annotate failures"
-            grep -E "^FAILED |^E   |^_+ " pytest.log | head -60 | while IFS= read -r line; do
-              # collapse newlines/backticks that would break the annotation
-              safe=$(printf '%s' "$line" | tr -d '\r' | sed 's/`/\\`/g')
-              echo "::error::$safe"
+            grep -E "^FAILED " pytest.log | head -20 | while IFS= read -r line; do
+              echo "::error::$line"
             done
-            echo "::endgroup::"
+            {
+              echo "### pytest failure — ${{ matrix.os }} py${{ matrix.python }}"
+              echo ''
+              echo '```'
+              tail -c 60000 pytest.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
           exit $rc
       - name: Upload pytest.log
