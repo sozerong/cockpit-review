@@ -29,3 +29,4 @@ bench/paper_c/out/.age_cache.json
 .vscode/
 .idea/
 *.swp
+.mutmut-cache

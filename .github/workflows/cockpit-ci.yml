@@ -1,0 +1,141 @@
+name: cockpit-ci
+# Trusted-refs CI: pytest matrix + baseline gate.
+#
+# Trigger is restricted to trusted code paths:
+#   - push to main/dev/v* tags (only maintainers can push there)
+#   - pull_request from SAME-REPO branches only (fork PRs are excluded via the
+#     head.repo.full_name guard on the job).
+#
+# Because every ref this workflow runs on has been merged/pushed by someone
+# with write access, it's safe to `pip install ".[dev]"` — arbitrary code in
+# pyproject.toml has already passed review. Fork PRs are handled by the
+# separate cockpit-pr-comment.yml, which uses pull_request_target and never
+# installs from PR-head code.
+on:
+  push:
+    branches: [main, dev]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  # Post pytest tail as a commit comment on failure — the only way for
+  # anon readers to see the failure detail on a public repo without
+  # Actions log auth. Safe because the `test` job already gates fork
+  # PRs out (head.repo.full_name == github.repository).
+  contents: write
+
+jobs:
+  test:
+    # Same-repo PRs only. Forks skip this job; they get the read-only diff
+    # comment from cockpit-pr-comment.yml instead.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install cockpit + dev deps
+        run: pip install ".[dev]"
+      - name: pytest
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -v --tb=long 2>&1 | tee pytest.log
+          exit ${PIPESTATUS[0]}
+      - name: Post pytest tail as commit comment on failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MATRIX_OS: ${{ matrix.os }}
+          MATRIX_PY: ${{ matrix.python }}
+        run: |
+          if [ ! -s pytest.log ]; then
+            echo "no pytest.log — earlier step failed"
+            exit 0
+          fi
+          {
+            printf '### pytest failure — %s py%s\n\n' "$MATRIX_OS" "$MATRIX_PY"
+            printf '```\n'
+            tail -c 30000 pytest.log
+            printf '\n```\n'
+          } > /tmp/comment.md
+          jq -Rs '{body: .}' /tmp/comment.md > /tmp/comment.json
+          gh api --method POST \
+            "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            --input /tmp/comment.json
+      - name: Upload pytest.log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-log-${{ matrix.os }}-${{ matrix.python }}
+          path: pytest.log
+          retention-days: 14
+
+  coverage-gate:
+    # Coverage floor is enforced on Ubuntu / Python 3.12 only (the matrix
+    # test job already proves the suite passes on every OS/version). Runs
+    # in parallel with the matrix, gated on the QA senior review's 70%
+    # threshold codified in pyproject.toml [tool.coverage.report].
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install cockpit + dev deps
+        run: pip install ".[dev]"
+      - name: pytest with coverage floor
+        run: pytest --cov=cockpit --cov-branch --cov-fail-under=85 -q
+
+  flake-budget:
+    # Zero-flake budget: run the suite 5× on Ubuntu/3.12. Any single
+    # failure over 5 runs = a flaky test, which the QA senior review
+    # said we ship zero of. Bumped from 1 → 5 to catch order-dependent
+    # or clock-sensitive tests without exploding CI time.
+    needs: test
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install cockpit + dev deps
+        run: pip install ".[dev]"
+      - name: 5× pytest
+        run: |
+          for i in 1 2 3 4 5; do
+            echo "==== run $i ===="
+            pytest -q || { echo "FLAKE on run $i"; exit 1; }
+          done
+
+  baseline-gate:
+    needs: test
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install cockpit
+        run: pip install .
+      - name: Baseline gate
+        run: cockpit check --exit-code --baseline > /dev/null

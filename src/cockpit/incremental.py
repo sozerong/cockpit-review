@@ -8,17 +8,29 @@ of the changed files only; findings for unchanged files come from cache.
 
 Goal: fastapi (1138 files) go from 5.8s full scan → sub-second on a
 single-file save. Measured in tests/test_incremental.py.
+
+Persistence: save()/load() dump the caches to `.cockpit/state/scanner-v1.json`
+so a fresh `cockpit check` on an unchanged repo hits the warm path instead
+of repaying the 5.8s cold scan. Version-stamped by cockpit __version__ →
+any upgrade invalidates automatically (analyzer version bumps ride along).
 """
 from __future__ import annotations
+import itertools
+import json
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
+from . import __version__
 from .analyzers import ANALYZERS, CROSS_FILE
 from .changeset import ChangeSet, FileChange, full_scan
 from .finding import Finding, to_json
-from .indexer import FileIndex, index_file
+from .indexer import FileIndex, Symbol, _next_generation, index_file
+
+_STATE_SCHEMA = 1
+_STATE_FILE = "scanner-v1.json"
 
 
 PhaseSetter = Callable[[str, str], None]
@@ -35,6 +47,61 @@ class IncrementalScanner:
         self.indices.clear()
         self.mtimes.clear()
         self.cache.clear()
+
+    def save(self, repo: Path) -> None:
+        """Dump indices/mtimes/cache to `.cockpit/state/scanner-v1.json`.
+        Silent on any error — persistence is best-effort, not load-bearing."""
+        try:
+            state_dir = repo / ".cockpit" / "state"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "schema": _STATE_SCHEMA,
+                "cockpit_version": __version__,
+                "indices": {p: _index_to_dict(idx) for p, idx in self.indices.items()},
+                "mtimes": self.mtimes,
+                "cache": {
+                    aid: {p: [_finding_to_dict(f) for f in fs]
+                          for p, fs in files.items()}
+                    for aid, files in self.cache.items()
+                },
+            }
+            target = state_dir / _STATE_FILE
+            tmp = target.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload), encoding="utf-8")
+            os.replace(tmp, target)
+        except OSError:
+            pass
+
+    def load(self, repo: Path) -> bool:
+        """Rehydrate from disk. Return True on hit, False on miss/corrupt.
+        Any exception → treat as absent (same policy as baseline.load)."""
+        p = repo / ".cockpit" / "state" / _STATE_FILE
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            return False
+        if not isinstance(data, dict): return False
+        if data.get("schema") != _STATE_SCHEMA: return False
+        if data.get("cockpit_version") != __version__: return False
+        try:
+            indices = {p: _index_from_dict(d) for p, d in data["indices"].items()}
+            mtimes = {p: float(m) for p, m in data["mtimes"].items()}
+            cache = {
+                aid: {p: [_finding_from_dict(fd) for fd in fs]
+                      for p, fs in files.items()}
+                for aid, files in data["cache"].items()
+            }
+        except (KeyError, TypeError, ValueError):
+            return False
+        # Advance the module-level generation counter past every loaded id
+        # so a newly indexed file cannot collide with a rehydrated one.
+        max_gen = max((idx.generation for idx in indices.values()), default=0)
+        from .indexer import _bump_generation_past
+        _bump_generation_past(max_gen)
+        self.indices = indices
+        self.mtimes = mtimes
+        self.cache = cache
+        return True
 
     def scan(self, repo: Path, force_full: bool = False,
              set_phase: PhaseSetter | None = None) -> dict:
@@ -160,3 +227,43 @@ class IncrementalScanner:
             "cached_files": len(cur_paths) - len(changed),
         }
         return env
+
+
+# ── serialization helpers ─────────────────────────────────────────────
+
+def _index_to_dict(idx: FileIndex) -> dict[str, Any]:
+    return {
+        "path": idx.path,
+        "content_hash": idx.content_hash,
+        "lines": idx.lines,
+        "symbols": [[s.name, s.kind, s.span[0], s.span[1]] for s in idx.symbols],
+        "generation": idx.generation,
+    }
+
+
+def _index_from_dict(d: dict[str, Any]) -> FileIndex:
+    symbols = tuple(
+        Symbol(name=s[0], kind=s[1], span=(int(s[2]), int(s[3])))
+        for s in d["symbols"]
+    )
+    return FileIndex(
+        path=d["path"], content_hash=d["content_hash"],
+        lines=int(d["lines"]), symbols=symbols,
+        generation=int(d["generation"]),
+    )
+
+
+def _finding_to_dict(f: Finding) -> dict[str, Any]:
+    return {
+        "aid": f.analyzer_id, "av": f.analyzer_version, "sev": f.severity,
+        "file": f.file, "span": [f.span[0], f.span[1]],
+        "sym": f.symbol, "msg": f.message, "ev": f.evidence,
+    }
+
+
+def _finding_from_dict(d: dict[str, Any]) -> Finding:
+    return Finding(
+        analyzer_id=d["aid"], analyzer_version=d["av"], severity=d["sev"],
+        file=d["file"], span=(int(d["span"][0]), int(d["span"][1])),
+        symbol=d["sym"], message=d["msg"], evidence=d["ev"],
+    )

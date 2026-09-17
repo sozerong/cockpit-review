@@ -26,6 +26,7 @@ from . import baseline as bl
 from .analyzers import run_all
 from .changeset import full_scan
 from .finding import Finding, sort_key, to_json
+from .incremental import IncrementalScanner
 from .indexer import index_file
 
 
@@ -34,20 +35,21 @@ _RESET = "\033[0m"
 _EXIT_ORDER = {"info": 0, "warn": 1, "block": 2}
 
 
-def _collect(repo: Path) -> tuple[list[Finding], int]:
-    cs = full_scan(repo)
-    indices = {}
-    for fc in cs.files:
-        try:
-            indices[fc.path] = index_file(fc.path, fc.absolute)
-        except Exception as e:
-            print(f"warn: index {fc.path}: {e}", file=sys.stderr)
-    return run_all(cs, indices), len(indices)
+def _collect(repo: Path) -> tuple[list[Finding], int, str]:
+    """Run analyzers via IncrementalScanner so `.cockpit/state/` cache
+    survives across CLI invocations. Returns (findings, files, mode)."""
+    scanner = IncrementalScanner()
+    scanner.load(repo)
+    env = scanner.scan(repo)
+    scanner.save(repo)
+    findings = [f for fs_map in scanner.cache.values()
+                for fs in fs_map.values() for f in fs]
+    return findings, env["summary"]["files_scanned"], env["incremental"]["mode"]
 
 
 def cmd_check(repo: Path, as_json: bool, use_color: bool,
               exit_code: bool, exit_at: str, use_baseline: bool) -> int:
-    findings, files_scanned = _collect(repo)
+    findings, files_scanned, _mode = _collect(repo)
     baselined: set[str] | None = None
     if use_baseline:
         baselined = bl.load(repo)
@@ -84,7 +86,7 @@ def cmd_check(repo: Path, as_json: bool, use_color: bool,
 
 
 def cmd_baseline_save(repo: Path) -> int:
-    findings, _ = _collect(repo)
+    findings, _, _ = _collect(repo)
     p = bl.save(repo, findings)
     print(f"baseline: {len(set(f.id for f in findings))} ids -> {p}")
     return 0

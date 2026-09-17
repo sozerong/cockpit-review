@@ -1,5 +1,124 @@
 # Changelog
 
+## 0.2.2 — 2026-09-17
+
+Follow-on to the v0.2.1 senior-review hardening. Every remaining
+code-actionable item from the four senior reviews (QA / backend /
+security / roadmap) is now cleared: coverage gate codified, mutation
+testing wired, scanner state persisted, singleton DI + `_PAGE` split
+done, two new analyzers, plus a macOS CI fix.
+
+**Backend arch debt cleared** — senior backend review's two remaining
+architecture items:
+
+*serve.py singleton DI* — the three module-level singletons
+(`_state`, `_scanner`, `_ALLOWED_HOSTS`) are now bundled into a
+`ServeContext` dataclass. `_scan`, `_watch_loop`, and `cmd_serve` accept
+a `ctx=` kwarg; `_make_handler(ctx)` binds a per-context handler
+subclass so concurrent serves in one process each get their own state.
+Backward-compat aliases at module level keep existing callers working.
+
+*_PAGE extraction* — the 800-line embedded HTML/JS/CSS string in
+`serve.py` moved to `src/cockpit/static/index.html`, loaded via
+`functools.lru_cache` on first request. `serve.py` shrank 1463 → 637
+lines (-56%). The dashboard is now editable in HTML mode with full
+lint/format tooling. Hatch `force-include` pins the static file into
+the wheel (verified).
+
+**Mutation testing gate wired** — senior QA review's v0.3.0 line-item
+"≥70% mutmut kill rate on the deterministic analysis path" now has
+scaffolding:
+
+- `mutmut>=2.4,<3.0` added under `[project.optional-dependencies].mutation`
+  (v3.x pinned out — no Windows support; v2.5.1 works cross-platform)
+- `[tool.mutmut]` config in `pyproject.toml` scoped to the analysis
+  path (`analyzers/`, `incremental.py`, `diff.py`, `baseline.py`,
+  `normalize.py`, `changeset.py`, `indexer.py`, `finding.py`).
+  Server/CLI/UI shells excluded (mostly wiring, low mutation payoff).
+- New `.github/workflows/mutmut.yml`: weekly cron (Mon 03:00 UTC) +
+  manual `workflow_dispatch`. NOT run per-PR — full mutation takes
+  CPU-hours. Job uploads HTML report as artifact (30-day retention).
+- Kill-rate gate is currently in *record* mode. Set the `MUTMUT_ENFORCE`
+  repo variable to `1` after the first full run establishes the
+  baseline; the workflow then fails when kill rate drops below 70%.
+
+Local mutmut runs on Windows are refused by mutmut itself (encoding
+bugs on non-ASCII source in v2, `abort()` in v3). Use WSL, Linux, or
+push to trigger the workflow.
+
+**Coverage floor raised to 85%** — new `tests/test_watch.py` (8) and
+`tests/test_serve_paths.py` (12) close the senior QA review's
+serve/watch gaps:
+
+    serve.py:  50%  ->  86%   (target >= 65)
+    watch.py:  23%  ->  94%   (target >= 60)
+    total:     83%  ->  88%   (floor bumped 70 -> 85)
+
+Every senior-QA per-module target for v0.3.0 now passing. Remaining
+uncovered lines are hard error paths (broken socket, cmd_serve boot,
+scan-crash except branches).
+
+**QA gates codified** — senior QA review's v0.3.0 coverage floor now
+enforced in CI, not just aspirational:
+
+- `pyproject.toml [tool.coverage.report] fail_under = 70` (measured 83%
+  with `demo()` self-checks excluded; overall raw is 74%)
+- New `coverage-gate` job in `cockpit-ci.yml` runs
+  `pytest --cov=cockpit --cov-branch --cov-fail-under=70` on Ubuntu/3.12
+- New `flake-budget` job runs the suite 5× and fails if any single run
+  fails — zero-flake budget in CI, not just in prose
+- 9 new direct-invocation CLI tests (`tests/test_cli_direct.py`) — the
+  T4 integration tests hit `cli.py` via subprocess, which pytest-cov
+  doesn't measure without a coveragerc dance; these hit `main()`
+  directly so the coverage number is real
+
+Per-module aspirational floors (documented in `pyproject.toml`, not
+enforced natively): incremental.py ≥90% (93% ✅), diff.py ≥85% (86% ✅),
+serve.py ≥65% (50% ⏳), watch.py ≥60% (23% ⏳). Follow-up work.
+
+**`ponytail.reinvented` v1 — new analyzer** — flags code that reinvents
+a stdlib primitive. Two patterns for v1, both `info` severity (suggestion,
+not bug):
+
+    total = 0                  # -> total = sum(xs)
+    for x in xs:
+        total += x
+
+    m = xs[0]                  # -> m = max(xs)
+    for x in xs:
+        if x > m:
+            m = x
+
+Precision-first shape rules: seed must be the statement IMMEDIATELY before
+the `for`; the body must be a single statement; the augmenting expression
+must be the exact loop variable. `total += x.value`, multi-statement
+bodies, non-zero seeds, or a seed detached from the loop by any
+intervening code — all skipped. 10 regression tests; 0 findings on
+cockpit's own repo.
+
+**`test.mocks-target` v2 — re-enabled** — v1 shipped disabled because
+precision measured <0.7 on the 20-finding pilot (§13.5 stop criterion).
+v2 adds a SUT-name filter: a patched target symbol is flagged **only**
+when the test function name starts with `test_<sym>` or `test_<sym>_...`
+(case-insensitive; PascalCase SUT vs snake_case test name handled).
+
+    test_compute_handles_zero + patch("mod.compute")     → BAD (SUT match)
+    test_widget_spin          + patch.object(mod, "Widget") → BAD
+    test_orchestrator_uses_compute + patch("mod.compute") → OK (dependency)
+
+Severity: warn. Re-runs of the pilot show 0 false positives on cockpit's
+own test suite. 14 regression tests covering SUT-filter word boundaries,
+`mocker.patch`, `patch.object`, and dependency-mock negatives.
+
+**Persistence** — `IncrementalScanner` now dumps its indices/mtimes/cache
+to `.cockpit/state/scanner-v1.json` after each successful scan and reloads
+on start. `cockpit check` and `cockpit serve` both benefit: a fresh
+process on an unchanged tree hits the warm path instead of repeating the
+cold scan. Version-stamped by `cockpit.__version__` — an upgrade
+auto-invalidates the state so analyzer version bumps ride along cleanly.
+Atomic write via `os.replace`; silent on any load/save error (same
+policy as `baseline.load`).
+
 ## 0.2.1 — 2026-09-17
 
 Hardening release from four independent senior reviews (QA, backend,
