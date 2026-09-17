@@ -1,0 +1,118 @@
+name: cockpit-pr-comment
+#
+# =====================================================================
+# READ BEFORE EDITING — this file's trigger is load-bearing for security.
+# =====================================================================
+#
+# WHY `pull_request_target` (and NOT `pull_request`):
+#   `pull_request` from a fork runs the WORKFLOW FILE FROM THE FORK with the
+#   base repo's GITHUB_TOKEN. That means a forked PR can rewrite this very
+#   file (or any script it calls, including pyproject.toml's build hooks) and
+#   execute arbitrary code with write scopes. `pull_request_target` instead
+#   runs the workflow file from the BASE repo (the trusted copy on main/dev),
+#   so an attacker cannot swap out the workflow logic just by opening a PR.
+#
+# WHY we do NOT `pip install` from the PR head:
+#   Even under pull_request_target, the PR head is untrusted code. A malicious
+#   `pyproject.toml` / `setup.py` / build backend / package entry-point can
+#   execute arbitrary Python at install time. We therefore install cockpit
+#   from the BASE ref (trusted), then run `cockpit check` against the PR head
+#   directory as READ-ONLY input. Cockpit's static analyzers walk source
+#   text — they do not import or exec user code.
+#
+# INVARIANTS a future maintainer MUST preserve:
+#   1. Trigger stays `pull_request_target`. Never change to `pull_request`.
+#   2. `actions/checkout@v4` with no `ref` checks out the BASE (trusted) copy
+#      of this workflow and the trusted `pyproject.toml` — install from that.
+#   3. PR head is checked out into a SEPARATE subdirectory (`pr_head/`), not
+#      the workspace root. Nothing from `pr_head/` is ever `pip install`ed,
+#      sourced, or executed.
+#   4. Any value derived from PR-head data (branch names, titles, file
+#      contents, baseline JSON) is passed via env vars, never interpolated
+#      into a shell command with `${{ ... }}`. Prevents shell injection.
+#   5. The PR-head checkout uses `persist-credentials: false` so head code
+#      cannot exfiltrate the GITHUB_TOKEN via `.git/config`.
+#   6. `GITHUB_TOKEN` is scoped only to the `gh pr comment` step, never
+#      exported to steps that touch `pr_head/`.
+#
+# If you find yourself wanting to "just install the PR's dev deps to make the
+# comment richer" — DON'T. That is the exact hole this workflow closes.
+# =====================================================================
+
+on:
+  pull_request_target:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Trusted base checkout (workspace root). Provides the base's
+      # pyproject.toml + workflow file. This is what we install from.
+      - name: Checkout base (trusted)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      # 2. PR head into a subdir — READ ONLY. Never installed, never executed.
+      - name: Checkout PR head (untrusted, read-only)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          path: pr_head
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 3. Install cockpit from the BASE (trusted) tree only.
+      - name: Install cockpit from base
+        run: pip install .
+
+      # 4. Scan the BASE tree — this is the pre-PR state.
+      - name: Scan base
+        run: cockpit check --json --no-color > base.json
+
+      # 5. Scan the PR head as data. `cockpit check` reads source text; it
+      # does not import PR code. If pr_head/cockpit-baseline.json is corrupt
+      # or malicious, baseline.load returns None — safe.
+      - name: Scan PR head (as data, no install)
+        working-directory: pr_head
+        run: cockpit check --json --no-color > ../head.json
+
+      - name: Build diff receipt (json)
+        run: cockpit diff base.json head.json --format json > receipt.json
+
+      - name: Build PR comment (markdown)
+        run: cockpit diff base.json head.json --format markdown > comment.md
+
+      - name: Upload findings + receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cockpit-findings
+          path: |
+            base.json
+            head.json
+            receipt.json
+
+      # 6. Post comment. GITHUB_TOKEN is scoped to this step only.
+      # PR_NUMBER goes via env — never interpolate PR-controlled data into
+      # the shell command directly.
+      - name: Comment on PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if grep -q "no meaningful change" comment.md; then
+            echo "no meaningful change — skipping comment"
+            exit 0
+          fi
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file comment.md

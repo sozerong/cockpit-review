@@ -1,0 +1,61 @@
+name: cockpit-ci
+# Trusted-refs CI: pytest matrix + baseline gate.
+#
+# Trigger is restricted to trusted code paths:
+#   - push to main/dev/v* tags (only maintainers can push there)
+#   - pull_request from SAME-REPO branches only (fork PRs are excluded via the
+#     head.repo.full_name guard on the job).
+#
+# Because every ref this workflow runs on has been merged/pushed by someone
+# with write access, it's safe to `pip install ".[dev]"` — arbitrary code in
+# pyproject.toml has already passed review. Fork PRs are handled by the
+# separate cockpit-pr-comment.yml, which uses pull_request_target and never
+# installs from PR-head code.
+on:
+  push:
+    branches: [main, dev]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # Same-repo PRs only. Forks skip this job; they get the read-only diff
+    # comment from cockpit-pr-comment.yml instead.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install cockpit + dev deps
+        run: pip install ".[dev]"
+      - name: pytest
+        run: pytest -q
+
+  baseline-gate:
+    needs: test
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install cockpit
+        run: pip install .
+      - name: Baseline gate
+        run: cockpit check --exit-code --baseline > /dev/null
